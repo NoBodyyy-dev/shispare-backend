@@ -1,4 +1,5 @@
-import AWS from "aws-sdk";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from 'uuid';
@@ -19,18 +20,18 @@ export interface ICloudService {
 }
 
 export class YandexCloudService implements ICloudService {
-    private s3: AWS.S3;
+    private s3: S3Client;
     private readonly bucketName: string;
 
     constructor() {
-        this.s3 = new AWS.S3({
+        this.s3 = new S3Client({
             endpoint: process.env.YC_STORAGE_ENDPOINT || 'https://storage.yandexcloud.net',
             region: process.env.YC_REGION || 'ru-central1',
             credentials: {
                 accessKeyId: process.env.YC_ACCESS_KEY_ID || '',
                 secretAccessKey: process.env.YC_SECRET_ACCESS_KEY || ''
             },
-            s3ForcePathStyle: true
+            forcePathStyle: true
         });
 
         this.bucketName = process.env.YC_BUCKET_NAME || '';
@@ -50,58 +51,61 @@ export class YandexCloudService implements ICloudService {
         const extension = path.extname(filePath).substring(1);
         const key = this.generateFileKey(folder, extension);
 
-        const params = {
+        const command = new PutObjectCommand({
             Bucket: this.bucketName,
             Key: key,
             Body: fileContent,
             ContentType: fileType
-        };
+        });
 
-        const result = await this.s3.upload(params).promise();
-        return result.Location;
+        await this.s3.send(command);
+        return `https://${this.bucketName}.storage.yandexcloud.net/${key}`;
     }
 
     async uploadBuffer(buffer: Buffer, folder?: string, fileType: CloudFileType = CloudFileType.PDF): Promise<string> {
         const key = this.generateFileKey(folder, fileType.split('/')[1]);
 
-        const params = {
+        const command = new PutObjectCommand({
             Bucket: this.bucketName,
             Key: key,
             Body: buffer,
             ContentType: fileType
-        };
+        });
 
-        const result = await this.s3.upload(params).promise();
-        return result.Location;
+        await this.s3.send(command);
+        return `https://${this.bucketName}.storage.yandexcloud.net/${key}`;
     }
 
     async uploadStream(stream: Readable, folder?: string, fileType: CloudFileType = CloudFileType.PDF): Promise<string> {
         const key = this.generateFileKey(folder, fileType.split('/')[1]);
 
-        const params = {
+        const command = new PutObjectCommand({
             Bucket: this.bucketName,
             Key: key,
             Body: stream,
             ContentType: fileType
-        };
+        });
 
-        const result = await this.s3.upload(params).promise();
-        return result.Location;
+        await this.s3.send(command);
+        return `https://${this.bucketName}.storage.yandexcloud.net/${key}`;
     }
 
     async getSignedUrl(fileKey: string, expiresIn: number = 3600): Promise<string> {
-        return this.s3.getSignedUrlPromise('getObject', {
+        const command = new GetObjectCommand({
             Bucket: this.bucketName,
-            Key: fileKey,
-            Expires: expiresIn
+            Key: fileKey
         });
+
+        return getSignedUrl(this.s3, command, { expiresIn });
     }
 
     async deleteFile(fileKey: string): Promise<void> {
-        await this.s3.deleteObject({
+        const command = new DeleteObjectCommand({
             Bucket: this.bucketName,
             Key: fileKey
-        }).promise();
+        });
+
+        await this.s3.send(command);
     }
 
     async extractKeyFromUrl(url: string): Promise<string> {

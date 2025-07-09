@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import {IStock} from "../interfaces/IStock";
+import {StockInterface} from "../interfaces/stock.interface";
 
 const StockSchema = new mongoose.Schema({
     title: {type: String, required: true, trim: true},
@@ -11,5 +11,5 @@ const StockSchema = new mongoose.Schema({
     end: {type: Date, required: true},
 })
 
-const Stock: mongoose.Model<IStock> = mongoose.model<IStock>("Stock", StockSchema);
+const Stock: mongoose.Model<StockInterface> = mongoose.model<StockInterface>("Stock", StockSchema);
 export default Stock;

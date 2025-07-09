@@ -2,8 +2,9 @@ import {Transporter, createTransport} from 'nodemailer';
 import path from 'path';
 import fs from 'fs';
 import handlebars from 'handlebars';
-import config from '../config/sender.config';
 import bot from "../bot";
+import config from '../config/sender.config';
+import {IOrderItem} from "../models/Order.model";
 
 interface EmailOptions {
     to: string;
@@ -58,7 +59,7 @@ export class SenderService {
     }
 
     public async sendVerificationEmail(data: { email: string, code: number | string }) {
-        await this.instance.sendMail({
+        await this.sendEmail({
             to: data.email,
             subject: "Подтвердите почту!",
             html: `
@@ -68,22 +69,47 @@ export class SenderService {
         })
     }
 
-    public async sendTelegramMessage(telegramId: number, text: string): Promise<boolean> {
+    public async sendTelegramMessage(data: { telegramId: number, text: string }): Promise<boolean> {
         try {
             await bot.telegram.sendMessage(
-                telegramId,
-                text,
+                data.telegramId,
+                data.text,
                 {parse_mode: 'HTML'}
             );
-            this.logger.info(`Telegram message sent to ${telegramId}`);
+            this.logger.info(`Сообщение отправлено ${data.telegramId}`);
             return true;
         } catch (error) {
-            this.logger.error(`Failed to send Telegram message to ${telegramId}`, error);
+            this.logger.error(`Failed to send Telegram message to ${data.telegramId}`, error);
             return false;
         }
     }
 
-    public async sendEmailCreateOrder(data: {to: string, orderId: string}) {
+    public async sendMessagesAboutCreatedOrder(data: {
+        to: string,
+        items: IOrderItem[],
+        orderNumber: string,
+        telegramId?: number
+    }): Promise<{ message: string, ok: boolean }> {
+        try {
+            const isSendEmail: boolean = await this.sendEmail({
+                to: data.to,
+                subject: "Заказ создан",
+                html: `Заказ <b>${data.orderNumber}</b> создан! Ожидайте подтверждения`
+            })
+            const isSendBot: boolean | null = data.telegramId
+                ? await this.sendTelegramMessage({
+                    telegramId: data.telegramId,
+                    text: "Заказ создан! Ожидайте подтверждения"
+                })
+                : null
 
+            if (isSendEmail && isSendBot || isSendEmail && !data.telegramId)
+                return {message: "Заказ создан", ok: true}
+            else
+                return {message: "Что-то пошло не так", ok: false}
+
+        } catch (e) {
+            return {message: "Что-то пошло не так", ok: false};
+        }
     }
 }

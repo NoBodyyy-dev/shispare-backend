@@ -1,16 +1,21 @@
-import { Server } from "socket.io";
-import {Order, OrderStatus, DeliveryType, IOrder} from "../models/Order.model";
-import { Cart } from "../models/Cart.model";
-import { User } from "../models/User.model";
+import {Server} from "socket.io";
 import PDFDocument from "pdfkit";
-import { YandexCloudService, CloudFileType } from "./cloud.service";
+
+import {Order, OrderStatus, DeliveryType, IOrder} from "../models/Order.model";
+import {Cart} from "../models/Cart.model";
+import {User} from "../models/User.model";
+import {YandexCloudService, CloudFileType} from "./cloud.service";
+import {SenderService} from "./sender.service";
+import cloud from "../config/cloud.config"
 
 export class OrderService {
     private cloudService: YandexCloudService;
+    private senderService: SenderService;
     private io?: Server;
 
     constructor(io?: Server) {
         this.cloudService = new YandexCloudService();
+        this.senderService = new SenderService();
         this.io = io;
     }
 
@@ -27,7 +32,7 @@ export class OrderService {
             this.sendProgress(socketId, "Начинаем обработку заказа", 10);
 
             const [cart, user] = await Promise.all([
-                Cart.findOne({ owner: userId }).populate("items.product"),
+                Cart.findOne({owner: userId}).populate("items.product"),
                 User.findById(userId),
             ]);
 
@@ -35,7 +40,7 @@ export class OrderService {
             if (!user) throw new Error("Пользователь не найден");
 
             this.sendProgress(socketId, "Расчет стоимости", 30);
-            const { totalPrice, finalPrice } = this.calculateOrderPrices(
+            const {totalPrice, finalPrice} = this.calculateOrderPrices(
                 cart.items,
                 discount
             );
@@ -71,10 +76,17 @@ export class OrderService {
                 socketId
             );
 
+            await this.senderService.sendMessagesAboutCreatedOrder({
+                to: user.email,
+                items: order.items,
+                orderNumber: order.orderNumber,
+                telegramId: user.telegramId
+            })
+
             this.sendProgress(socketId, "Заказ создан", 100);
             return order.toObject();
         } catch (error) {
-            this.sendError(socketId, (error as {message: string}).message);
+            this.sendError(socketId, (error as { message: string }).message);
             throw error;
         }
     }
@@ -83,13 +95,13 @@ export class OrderService {
      * Получает заказы пользователя
      */
     async getUserOrders(userId: string) {
-        return Order.find({ owner: userId })
+        return Order.find({owner: userId})
             .populate({
                 path: "items.product",
                 model: "Product",
             })
             .populate("owner")
-            .sort({ createdAt: -1 });
+            .sort({createdAt: -1});
     }
 
     /**
@@ -114,8 +126,8 @@ export class OrderService {
     ) {
         const order = await Order.findByIdAndUpdate(
             orderId,
-            { $set: { status } },
-            { new: true }
+            {$set: {status}},
+            {new: true}
         )
             .populate("owner")
             .populate({
@@ -125,9 +137,7 @@ export class OrderService {
 
         if (!order) throw new Error("Заказ не найден");
 
-        if (notifyUser) {
-            this.notifyUserAboutStatusChange(order.owner._id.toString(), order);
-        }
+        if (notifyUser) this.notifyUserAboutStatusChange(order.owner._id.toString(), order);
 
         return order;
     }
@@ -138,8 +148,8 @@ export class OrderService {
     async setDeliveryDate(orderId: string, date: Date) {
         return Order.findByIdAndUpdate(
             orderId,
-            { $set: { deliveryDate: date } },
-            { new: true }
+            {$set: {deliveryDate: date}},
+            {new: true}
         );
     }
 
@@ -153,7 +163,7 @@ export class OrderService {
                 model: "Product",
             })
             .populate("owner")
-            .sort({ createdAt: -1 });
+            .sort({createdAt: -1});
     }
 
     /**
@@ -184,13 +194,11 @@ export class OrderService {
                     paymentMethod: data.paymentMethod
                 }
             },
-            { new: true }
+            {new: true}
         )
             .populate('items.product')
             .populate('user');
     }
-
-    // ============ Вспомогательные методы ============
 
     private async saveOrder(
         userId: string,
@@ -220,9 +228,8 @@ export class OrderService {
         });
 
         await order.save();
-        await Cart.updateOne({ owner: userId }, { $set: { items: [] } });
+        await Cart.updateOne({owner: userId}, {$set: {items: []}});
 
-        // Уведомляем администраторов о новом заказе
         await this.notifyAdminsAboutNewOrder(order);
 
         return order;
@@ -237,7 +244,7 @@ export class OrderService {
 
         const finalPrice = totalPrice * (1 - discount / 100);
 
-        return { totalPrice, finalPrice };
+        return {totalPrice, finalPrice};
     }
 
     private async generateOrderPdf(orderData: {
@@ -256,7 +263,7 @@ export class OrderService {
             doc.on("end", () => resolve(Buffer.concat(chunks)));
 
             // Заголовок
-            doc.fontSize(20).text(`Заказ №${Date.now()}`, { align: "center" });
+            doc.fontSize(20).text(`Заказ №${Date.now()}`, {align: "center"});
             doc.moveDown();
 
             // Информация о клиенте
@@ -266,7 +273,7 @@ export class OrderService {
                 .text(`Дата: ${new Date().toLocaleDateString("ru-RU")}`);
 
             doc.moveDown();
-            doc.fontSize(16).text("Состав заказа:", { underline: true });
+            doc.fontSize(16).text("Состав заказа:", {underline: true});
             doc.moveDown();
 
             // Список товаров
@@ -299,7 +306,7 @@ export class OrderService {
     }
 
     private extractFileKeyFromUrl(url: string): string {
-        const baseUrl = `https://${process.env.YC_BUCKET_NAME}.storage.yandexcloud.net/`;
+        const baseUrl = `https://${cloud.YC_BUCKET_NAME}.storage.yandexcloud.net/`;
         if (url.startsWith(baseUrl)) {
             return url.substring(baseUrl.length);
         }
@@ -314,15 +321,15 @@ export class OrderService {
         percent: number
     ) {
         if (!socketId) return;
-        this.io!.to(socketId).emit("order:progress", { message, percent });
+        this.io!.to(socketId).emit("order:progress", {message, percent});
     }
 
     private sendError(socketId: string | undefined, error: string) {
         if (!socketId) return;
-        this.io!.to(socketId).emit("order:error", { error });
+        this.io!.to(socketId).emit("order:error", {error});
     }
 
-    private async notifyAdminsAboutNewOrder(order: any) {
+    private async notifyAdminsAboutNewOrder(order: IOrder) {
         const adminSockets = await this.io!.in("admin").fetchSockets();
         if (adminSockets.length === 0) return;
 
@@ -336,6 +343,6 @@ export class OrderService {
     private notifyUserAboutStatusChange(userId: string, order: any) {
         this.io!
             .to(`user_${userId}`)
-            .emit("order:status-updated", { orderId: order._id, status: order.status });
+            .emit("order:status-updated", {orderId: order._id, status: order.status});
     }
 }

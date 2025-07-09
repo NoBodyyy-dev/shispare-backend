@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, {Types} from "mongoose";
 
 export interface IProduct extends Document{
     title: string,
@@ -16,4 +16,14 @@ export interface IProduct extends Document{
     consumption: number,
     documents: string[],
     totalPurchases: number,
+}
+
+export interface ICartProduct extends Document{
+    product: Types.ObjectId;
+    optionIndex: number;
+    quantity: number;
+    addedAt: Date;
+    customOptions?: {
+        [key: string]: string | number;
+    };
 }

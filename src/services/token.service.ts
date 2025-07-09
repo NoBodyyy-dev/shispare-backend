@@ -1,6 +1,8 @@
 import {Token} from '../models/Token.model';
 import jwt from "jsonwebtoken";
 import config from "../config/config";
+import bcrypt from "bcrypt";
+import {SHA256_HEADER} from "@aws-sdk/s3-request-presigner/dist-types/constants";
 
 export interface PairTokens {
     accessToken: string;

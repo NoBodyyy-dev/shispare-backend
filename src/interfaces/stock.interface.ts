@@ -1,4 +1,4 @@
-export interface IStock extends Document {
+export interface StockInterface extends Document {
     title: string
     description: string;
     conditions: string[]

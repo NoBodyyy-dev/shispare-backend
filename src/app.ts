@@ -1,4 +1,3 @@
-// imports
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -10,26 +9,29 @@ import cookieParser from "cookie-parser";
 import {Server} from "socket.io";
 import config from "./config/config";
 import bot from "./bot"
-import {setupOrderSockets} from "./socket /socket";
+// import {app, server} from "./socket /socket";
 import {errorMiddleware, notFoundMiddleware} from "./middleware/error.middleware";
 import {router} from "./router/router";
+import {socketAuthMiddleware} from "./middleware/auth.middleware";
+import {User} from "./models/User.model";
 
-// initialize app
-const app = express();
-const server = http.createServer(app);
+export const app = express();
+export const server = http.createServer(app);
+
 const io = new Server(server, {
     cors: {
         origin: config.CLIENT_URL,
         methods: ['GET', 'POST'],
     },
 });
+io.use(socketAuthMiddleware);
 
-// app.use
 app.use(express.json());
-app.use(cookieParser());
+app.use(cookieParser(config.COOKIE_SECRET));
 app.use(cors({
     origin: config.CLIENT_URL,
     credentials: true,
+    exposedHeaders: ['set-cookie']
 }));
 app.use("/shispare", router);
 app.use(notFoundMiddleware);
@@ -37,7 +39,6 @@ app.use(errorMiddleware);
 
 async function run(): Promise<void> {
     try {
-        setupOrderSockets(io);
         await mongoose.connect(config.DB_URI);
         server.listen(config.APP_PORT);
         console.log(`App started - http://localhost:${config.APP_PORT}`);

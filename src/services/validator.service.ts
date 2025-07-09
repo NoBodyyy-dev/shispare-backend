@@ -1,6 +1,6 @@
 import axios from 'axios';
 import config from "../config/config";
-import {APIError} from '../utils/error';
+import {APIError} from './error.service';
 
 interface ValidationResult {
     fullName: string;
@@ -10,7 +10,6 @@ interface ValidationResult {
 
 export class CompanyValidationService {
     async validate(type: 'ЮЛ' | 'ИП', legalId: string): Promise<ValidationResult> {
-        // Валидация ИНН (выбросит исключение при ошибке)
         this.validateINN(legalId, type);
 
         let response: any;
@@ -70,7 +69,6 @@ export class CompanyValidationService {
     }
 
     private validateINN(inn: string, type: 'ЮЛ' | 'ИП'): void {
-        // Проверка длины и формата
         const innRegex = type === 'ЮЛ' ? /^\d{10}$/ : /^\d{12}$/;
         if (!innRegex.test(inn)) {
             throw APIError.BadRequest({
@@ -79,11 +77,9 @@ export class CompanyValidationService {
             });
         }
 
-        // Преобразуем строку в массив чисел
         const innDigits = inn.split('').map(Number);
 
-        if (type === 'ЮЛ') {
-            // Проверка контрольной суммы для 10-значного ИНН
+        if (type === 'ЮЛ') {2
             const weights = [2, 4, 10, 3, 5, 9, 4, 6, 8];
             const controlSum = innDigits.slice(0, 9).reduce(
                 (sum, digit, i) => sum + digit * weights[i], 0
@@ -97,15 +93,12 @@ export class CompanyValidationService {
                 });
             }
         } else {
-            // Проверка контрольных сумм для 12-значного ИНН
-            // Первая контрольная сумма (11-я цифра)
             const weights1 = [7, 2, 4, 10, 3, 5, 9, 4, 6, 8];
             const controlSum1 = innDigits.slice(0, 10).reduce(
                 (sum, digit, i) => sum + digit * weights1[i], 0
             );
             const controlNumber1 = (controlSum1 % 11) % 10;
 
-            // Вторая контрольная сумма (12-я цифра)
             const weights2 = [3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8];
             const controlSum2 = innDigits.slice(0, 11).reduce(
                 (sum, digit, i) => sum + digit * weights2[i], 0

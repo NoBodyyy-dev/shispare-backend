@@ -1,7 +1,7 @@
 import {Markup, Telegraf} from 'telegraf';
 import {User} from './models/User.model';
 import config from './config/config';
-import Order from "./models/Order.model";
+import {Order} from "./models/Order.model";
 
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -14,10 +14,10 @@ const getMainMenu = () => Markup.keyboard([
 bot.start(async (ctx) => {
     const personalKey = ctx.payload;
 
-    let user = await User.findOne({ telegramId: ctx.message.chat.id });
+    let user = await User.findOne({telegramId: ctx.message.chat.id});
 
     if (!user) {
-        user = await User.findOne({ personalKey });
+        user = await User.findOne({personalKey});
         if (!user) return ctx.reply(`Здравствуйте! Для использования бота вам необходимо получить персональный ключ.`);
         user.telegramId = ctx.message.chat.id;
         await user.save();
@@ -30,7 +30,7 @@ bot.start(async (ctx) => {
 });
 
 bot.hears('📋 Все заказы', async (ctx) => {
-    const orders = await Order.find({ userId: ctx.message.chat.id });
+    const orders = await Order.find({userId: ctx.message.chat.id});
 
     if (orders.length === 0) {
         return ctx.reply('У вас нет активных заказов.');
@@ -40,7 +40,7 @@ bot.hears('📋 Все заказы', async (ctx) => {
         Markup.button.callback(`Заказ #${order._id}`, `order_${order._id}`)
     );
 
-    await ctx.reply('Ваши заказы:', Markup.inlineKeyboard(buttons, { columns: 1 }));
+    await ctx.reply('Ваши заказы:', Markup.inlineKeyboard(buttons, {columns: 1}));
 });
 
 bot.hears('❓ Отправить вопрос', async (ctx) => {
@@ -48,7 +48,7 @@ bot.hears('❓ Отправить вопрос', async (ctx) => {
 });
 
 bot.hears('👤 Личный кабинет', async (ctx) => {
-    const user = await User.findOne({ telegramId: ctx.message.chat.id });
+    const user = await User.findOne({telegramId: ctx.message.chat.id});
     if (!user) return ctx.reply('Пользователь не найден.');
 
     await ctx.replyWithHTML(`
@@ -81,7 +81,7 @@ bot.hears('👤 Личный кабинет', async (ctx) => {
 // Обработка кнопки "Назад" в деталях заказа
 bot.action('back_to_orders', async (ctx) => {
     try {
-        const orders = await Order.find({ userId: ctx.callbackQuery.from.id });
+        const orders = await Order.find({userId: ctx.callbackQuery.from.id});
 
         if (!orders || orders.length === 0) {
             return ctx.editMessageText('У вас нет активных заказов.');

@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
-import IPost from "../interfaces/IPost";
+import PostInterface from "../interfaces/post.interface";
 
-const postSchema = new mongoose.Schema<IPost>(
+const postSchema = new mongoose.Schema<PostInterface>(
   {
     title: { type: String, trim: true, required: true },
     description: { type: String, trim: true, required: true },
@@ -10,5 +10,5 @@ const postSchema = new mongoose.Schema<IPost>(
   },
   { timestamps: true }
 );
-const Post: mongoose.Model<IPost> = mongoose.model<IPost>("Post", postSchema);
+const Post: mongoose.Model<PostInterface> = mongoose.model<PostInterface>("Post", postSchema);
 export default Post;

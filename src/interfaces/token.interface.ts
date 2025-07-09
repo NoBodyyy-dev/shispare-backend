@@ -1,9 +1,9 @@
 import mongoose from "mongoose";
 
-interface IToken {
+interface TokenInterface {
     _id: string;
     refreshToken: string;
     userID: mongoose.Types.ObjectId;
 }
 
-export default IToken;
+export default TokenInterface;

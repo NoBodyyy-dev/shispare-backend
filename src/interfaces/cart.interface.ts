@@ -11,7 +11,7 @@ export interface ICartItem {
 }
 
 export interface ICart extends Document {
-    user: Types.ObjectId;
+    owner: Types.ObjectId;
     items: ICartItem[];
     createdAt: Date;
     updatedAt: Date;

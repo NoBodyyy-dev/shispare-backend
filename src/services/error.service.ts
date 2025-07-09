@@ -133,7 +133,10 @@ export class APIError extends Error {
     }
 
     public static async catchError(req: express.Request, res: express.Response, next: express.NextFunction) {
-        const errors = validationResult(req)
-        if (!errors.isEmpty()) return next(APIError.BadRequest({message: "Ошибка валидации", errors: errors.array()}));
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            next(APIError.BadRequest({message: "Ошибка валидации", errors: errors.array()}));
+            return
+        }
     };
 }

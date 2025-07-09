@@ -1,5 +1,5 @@
 import {Request, Response, NextFunction, ErrorRequestHandler} from 'express';
-import { APIError } from '../utils/error';
+import { APIError } from '../services/error.service';
 import { Logger } from '../services/logger.service';
 
 export const errorMiddleware: ErrorRequestHandler = (
@@ -8,16 +8,7 @@ export const errorMiddleware: ErrorRequestHandler = (
     res: Response,
     next: NextFunction
 ) => {
-    Logger.error(`[${req.method}] ${req.originalUrl}`, {
-        error: err.message,
-        stack: err.stack,
-        status: err instanceof APIError ? err.status : 500,
-        body: req.body,
-        params: req.params,
-        query: req.query,
-        ip: req.ip,
-        userAgent: req.get('user-agent')
-    });
+    console.log(err)
 
     if (err instanceof APIError) {
         err.path = req.path;

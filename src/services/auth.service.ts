@@ -31,6 +31,7 @@ export class AuthService {
 
     async register(data: RegisterData) {
         this.validateRegistrationData(data);
+        console.log(data)
 
         if (await this.userService.userExists(data.email))
             throw APIError.BadRequest({message: 'Пользователь с таким email уже существует'});
@@ -44,6 +45,7 @@ export class AuthService {
         });
 
         const code = this.sessionService.generateCode();
+        console.log(code)
         await this.sessionService.createSession({
             userId: user.id,
             token: sessionToken,
@@ -57,7 +59,7 @@ export class AuthService {
 
     private validateRegistrationData(data: any) {
         if (!data.email || !data.password) {
-            throw APIError.BadRequest({message: 'Email и пароль обязательны'});
+            throw APIError.BadRequest({message: 'Адрес электронной почты и пароль обязательны'});
         }
 
         if (data.type === 'LGL' && (!data.legalType || !data.legalId)) {
@@ -86,7 +88,7 @@ export class AuthService {
 
     async login(data: { email: string; password: string }) {
         const user = await this.userService.verifyCredentials(data.email, data.password);
-
+        if (!user) return {success: false}
         const sessionToken = this.tokenService.generateSessionToken({
             id: user.id,
             email: user.email,
@@ -102,10 +104,11 @@ export class AuthService {
 
         await this.senderService.sendVerificationEmail({email: user.email, code});
 
-        return {sessionToken};
+        return {sessionToken, success: true};
     }
 
     async verifyCode(sessionToken: string, code: string) {
+        console.log(sessionToken);
         const session = await this.sessionService.verifyCode(sessionToken, code);
         const tokens = this.tokenService.generateTokens({
             id: session.user._id.toString(),

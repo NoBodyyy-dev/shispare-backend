@@ -73,7 +73,7 @@ const OrderSchema = new Schema<IOrder>({
         unique: true,
         default: () => `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     },
-    owner: {type: Schema.Types.ObjectId, ref: 'User', required: true},
+    owner: {type: Schema.Types.ObjectId, ref: 'User', required: true, index: true},
     items: [{
         product: {type: Schema.Types.ObjectId, ref: 'Product', required: true},
         optionIndex: {type: Number, required: true},
@@ -107,19 +107,14 @@ const OrderSchema = new Schema<IOrder>({
     versionKey: false
 });
 
-OrderSchema.index({orderNumber: 1});
-OrderSchema.index({user: 1});
 OrderSchema.index({status: 1});
 OrderSchema.index({createdAt: -1});
 
-// Middleware для предварительной обработки
 OrderSchema.pre<IOrder>('save', function (next) {
-    // Автоматическая генерация трек-номера для отправленных заказов
     if (this.isModified('status') && this.status === OrderStatus.SHIPPED && !this.trackingNumber) {
         this.trackingNumber = `TRACK-${this.orderNumber.slice(-8)}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     }
 
-    // Фиксация времени доставки/отмены
     if (this.isModified('status')) {
         if (this.status === OrderStatus.DELIVERED) {
             this.deliveredAt = new Date();
@@ -131,7 +126,6 @@ OrderSchema.pre<IOrder>('save', function (next) {
     next();
 });
 
-// Статические методы модели
 OrderSchema.statics = {
     async findByUser(userId: Types.ObjectId) {
         return this.find({user: userId}).sort({createdAt: -1});
@@ -142,5 +136,4 @@ OrderSchema.statics = {
     }
 };
 
-// Экспорт модели
 export const Order = mongoose.model<IOrder>('Order', OrderSchema);

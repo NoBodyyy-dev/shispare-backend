@@ -5,7 +5,7 @@ export class ProductController {
     constructor(private readonly productService: ProductService = new ProductService()) {
     }
 
-    async createProduct(req: Request, res: Response, next: NextFunction) {
+    createProduct = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const product = await this.productService.createProduct(req.body);
             res.status(201).json({product});
@@ -14,7 +14,7 @@ export class ProductController {
         }
     }
 
-    async getProductsByCategory(req: Request, res: Response, next: NextFunction) {
+    getProductsByCategory = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const products = await this.productService.getProductsByCategory(req.params.slug);
             res.status(200).json({products});
@@ -23,7 +23,7 @@ export class ProductController {
         }
     }
 
-    async getProduct(req: Request, res: Response, next: NextFunction) {
+    getProduct = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const product = await this.productService.getProduct(req.params.slug);
             res.status(200).json({product});
@@ -32,7 +32,7 @@ export class ProductController {
         }
     }
 
-    async getPopularProducts(req: Request, res: Response, next: NextFunction) {
+    getPopularProducts = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const products = await this.productService.getPopularProducts();
             res.status(200).json({products});
@@ -41,7 +41,7 @@ export class ProductController {
         }
     }
 
-    async getProductsWithDiscount(req: Request, res: Response, next: NextFunction) {
+    getProductsWithDiscount = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const products = await this.productService.getProductsWithDiscount();
             res.status(200).json({products});
@@ -50,7 +50,7 @@ export class ProductController {
         }
     }
 
-    async getProductsByBestRating(req: Request, res: Response, next: NextFunction) {
+    getProductsByBestRating = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const products = await this.productService.getProductsByBestRating();
             res.status(200).json({products});
@@ -59,7 +59,7 @@ export class ProductController {
         }
     }
 
-    async updateProduct(req: Request, res: Response, next: NextFunction) {
+    updateProduct = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const product = await this.productService.updateProduct(
                 req.params.productID,
@@ -71,7 +71,7 @@ export class ProductController {
         }
     }
 
-    async setDiscountOnCategoryProducts(req: Request, res: Response, next: NextFunction) {
+    setDiscountOnCategoryProducts = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const {discount} = req.body;
             const products = await this.productService.setDiscountOnCategoryProducts(
@@ -84,7 +84,7 @@ export class ProductController {
         }
     }
 
-    async deleteProduct(req: Request, res: Response, next: NextFunction) {
+    deleteProduct = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const result = await this.productService.deleteProduct(req.params.productID);
             res.status(200).json(result);

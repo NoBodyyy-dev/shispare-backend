@@ -1,23 +1,23 @@
 import express, {Router} from "express";
 import {asyncHandler, createCode, createSlug} from "../utils/utils";
 import * as controller from "../controllers/category.controller";
-import authMiddleware from "../middleware/auth.middleware";
-import accessMiddleware from "../middleware/admin.middleware";
-import APIError from "../utils/error";
+import {authMiddleware} from "../middleware/auth.middleware";
+import {adminMiddleware} from "../middleware/admin.middleware";
+import {APIError} from "../services/error.service";
 import axios from "axios";
 import Category from "../models/Category.model";
 
 const categoryRouter = Router();
 
-categoryRouter.post("/create", [authMiddleware, accessMiddleware], asyncHandler(controller.createCategory))
+categoryRouter.post("/create", [authMiddleware, adminMiddleware], asyncHandler(controller.createCategory))
 categoryRouter.get("/get-all", asyncHandler(controller.getAllCategories));
-categoryRouter.put("/update/:id", [authMiddleware, accessMiddleware], asyncHandler(controller.updateCategory));
-categoryRouter.delete("/delete-category/:id", [authMiddleware, accessMiddleware], asyncHandler(controller.deleteCategory));
+categoryRouter.put("/update/:id", [authMiddleware, adminMiddleware], asyncHandler(controller.updateCategory));
+categoryRouter.delete("/delete-category/:id", [authMiddleware, adminMiddleware], asyncHandler(controller.deleteCategory));
 
 categoryRouter.post("/insert", asyncHandler(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     try {
         const haha = await axios.get("http://s1-api.sikayufo.ru/catalog/group/all-list")
-        if (haha.status !== 200) return next(APIError.BadRequests(`${haha.status}`))
+        if (haha.status !== 200) return next(APIError.BadRequest({message: `${haha.status}`}))
         const insertData = (haha.data as any).data.map((d: {id: number; name: string}) => {
             return {title: d.name, slug: createSlug(d.name), group: d.id}
         })
@@ -32,10 +32,10 @@ categoryRouter.post("/insert", asyncHandler(async (req: express.Request, res: ex
 categoryRouter.post("/insert-items", asyncHandler(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     try {
        const cat = await Category.find();
-       if (!cat) return next(APIError.NotFound("Category not found"));
+       if (!cat) return next(APIError.NotFound({message: "Category not found"}));
         for (const c of cat) {
             const originalArray = await axios.get(`http://s1-api.sikayufo.ru/catalog?add=count&per_page=100&groupId=${c.id}&isActive=1&expand=fileCovers,fileImgs,fileDocs,uses,details,colors,items,catalogItem.pack,catalogItem.color`)
-            if (!originalArray) return next(APIError.NotFound("Products not found"));
+            if (!originalArray) return next(APIError.NotFound({message: "Products not found"}));
             const transformedProducts = (originalArray.data as Array<any>).map(product => {
                 return {
                     title: product.name,

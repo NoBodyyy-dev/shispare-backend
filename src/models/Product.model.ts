@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import ProductInterface from "../interfaces/product.interface";
+import {IProduct} from "../interfaces/product.interface";
 
 const productSchema = new mongoose.Schema({
     title: {type: String, required: true, trim: true, max: 64},
@@ -22,4 +22,4 @@ const productSchema = new mongoose.Schema({
     totalPurchases: {type: Number, required: true, default: 0, min: 0},
 })
 
-export const Product: mongoose.Model<ProductInterface> = mongoose.model<ProductInterface>("Product", productSchema);
+export const Product: mongoose.Model<IProduct> = mongoose.model<IProduct>("Product", productSchema);

@@ -12,6 +12,7 @@ export interface IUser {
     legalId?: number;
     telegramId?: number;
     personalKey: string;
+    online: boolean;
 }
 
 const userSchema = new mongoose.Schema<IUser>({
@@ -29,7 +30,8 @@ const userSchema = new mongoose.Schema<IUser>({
     legalId: { type: Number },
     telegramId: { type: Number, unique: true, sparse: true },
     personalKey: { type: String, required: true, unique: true },
-    banned: { type: Boolean, required: true, default: false }
+    banned: { type: Boolean, required: true, default: false },
+    online: { type: Boolean, required: true, default: false },
 });
 
 export const User: mongoose.Model<IUser> = mongoose.model<IUser>("User", userSchema);

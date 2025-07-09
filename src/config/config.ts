@@ -3,8 +3,8 @@ dotenv.config();
 
 export default {
     APP_PORT: process.env.APP_PORT!,
-    BOT_PORT: process.env.BOT_PORT!,
     BOT_TOKEN: process.env.BOT_TOKEN!,
+    COOKIE_SECRET: process.env.COOKIE_SECRET!,
     CLIENT_URL: process.env.CLIENT_URL!,
     DB_URI: process.env.DB_URI!,
     ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET!,

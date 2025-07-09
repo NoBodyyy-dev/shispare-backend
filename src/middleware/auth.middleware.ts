@@ -25,12 +25,10 @@ export const socketAuthMiddleware = async (socket: Socket, next: (err?: Extended
     try {
         const token = socket.handshake.auth.token;
         if (!token) return next(APIError.Unauthorized());
-
         const candidate = await tokenService.validateToken(token, "A");
-        if (!candidate) return next(APIError.Unauthorized());
-        const user = await User.findOne({_id: candidate.email});
+        if (!candidate || !candidate.email) return next(APIError.Unauthorized());
+        const user = await User.findOne({email: candidate.email});
         if (!user) return next(APIError.Unauthorized());
-
         socket.user = user;
         next();
     } catch (error) {

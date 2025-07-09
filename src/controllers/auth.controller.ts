@@ -1,38 +1,42 @@
-import {AuthService} from "../services/auth.service";
 import {Request, Response, NextFunction} from "express";
+import {AuthService} from "../services/auth.service";
 import {APIError} from "../services/error.service"
 
 export class AuthController {
-    constructor(private readonly authService: AuthService = new AuthService()) {
+    private readonly authService: AuthService
+
+    constructor() {
+        this.authService = new AuthService();
     }
 
-    public async loginFunc(req: Request, res: Response, next: NextFunction) {
+    public loginFunc = async (req: Request, res: Response, next: NextFunction) => {
         try {
             await APIError.catchError(req, res, next);
             const result = await this.authService.login(req.body);
             res.cookie("ss_id", result.sessionToken, {
                 httpOnly: true,
-                secure: true,
+                secure: false,
                 signed: true,
                 maxAge: 3 * 60 * 60 * 1000,
-                sameSite: 'strict'
+                sameSite: 'lax'
             });
-            res.status(200).json({message: "Подтвердите почту!"})
+            res.status(200).json({message: "Подтвердите почту!", success: result.success});
         } catch (e) {
             next(e);
         }
     }
 
-    public async registerFunc(req: Request, res: Response, next: NextFunction) {
+    public registerFunc = async (req: Request, res: Response, next: NextFunction) => {
         try {
             await APIError.catchError(req, res, next);
             const result = await this.authService.register(req.body);
+            console.log(result);
             res.cookie("ss_id", result.sessionToken, {
                 httpOnly: true,
-                secure: true,
+                secure: false,
                 signed: true,
                 maxAge: 3 * 60 * 60 * 1000,
-                sameSite: 'strict'
+                sameSite: 'lax'
             });
             res.status(200).json({message: "Подтвердите почту!"})
         } catch (e) {
@@ -40,28 +44,32 @@ export class AuthController {
         }
     }
 
-    public async verifyCode(req: Request, res: Response, next: NextFunction) {
+    public verifyCode = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const ss_id = req.signedCookies["ss_id"];
-            const { code } = req.body;
+            const {code} = req.body;
 
+            console.log(code)
+            console.log(ss_id);
+            console.log(req.cookies);
             const tokens = await this.authService.verifyCode(ss_id, code);
 
             res.cookie('refreshToken', tokens.refreshToken, {
                 maxAge: 60 * 24 * 60 * 60 * 1000,
                 httpOnly: true,
-                secure: true,
-                signed: true
+                secure: false,
+                signed: true,
+                sameSite: 'lax'
             });
 
             res.clearCookie('ss_id');
-            res.json({ accessToken: tokens.accessToken });
+            res.json({accessToken: tokens.accessToken, success: true});
         } catch (e) {
             next(e);
         }
     }
 
-    public async logoutFunc(req: Request, res: Response, next: NextFunction) {
+    public logoutFunc = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const {refreshToken} = req.cookies
             await this.authService.logout(refreshToken);
@@ -73,7 +81,7 @@ export class AuthController {
         }
     }
 
-    public async refreshFunc(req: Request, res: Response, next: NextFunction) {
+    public refreshFunc = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const refreshToken = req.signedCookies['refreshToken'];
             const tokens = await this.authService.refreshToken(refreshToken);
@@ -85,7 +93,7 @@ export class AuthController {
                 signed: true
             });
 
-            res.json({ accessToken: tokens.accessToken });
+            res.json({accessToken: tokens.accessToken});
         } catch (e) {
             next(e);
         }

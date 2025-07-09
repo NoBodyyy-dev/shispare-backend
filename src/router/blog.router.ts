@@ -1,8 +1,8 @@
 import {Router} from "express";
 import {asyncHandler} from "../utils/utils";
 import * as controller from "../controllers/blog.controller";
-import authMiddleware from "../middleware/auth.middleware";
-import accessMiddleware from "../middleware/admin.middleware";
+import {authMiddleware} from "../middleware/auth.middleware";
+import {adminMiddleware} from "../middleware/admin.middleware";
 
 const blogRouter = Router();
 

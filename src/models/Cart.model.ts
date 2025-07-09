@@ -2,7 +2,7 @@ import {Schema, Types, model} from "mongoose";
 import {ICart, ICartItem} from "../interfaces/cart.interface";
 
 const CartSchema = new Schema<ICart>({
-    user: {type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true},
+    owner: {type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true},
     items: [{
         product: {type: Schema.Types.ObjectId, ref: 'Product', required: true},
         optionIndex: {type: Number, required: true, min: 0},
@@ -33,7 +33,6 @@ CartSchema.virtual('totalPrice').get(function (this: ICart) {
     }, 0);
 });
 
-CartSchema.index({user: 1});
 CartSchema.index({lastActivity: 1});
 
 CartSchema.pre<ICart>(/^(save|updateOne|findOneAndUpdate)/, function (next) {
@@ -87,7 +86,6 @@ CartSchema.methods = {
         if (itemIndex === -1) throw new Error('Товар не найден в корзине');
 
         if (newQuantity <= 0) {
-            // Удаляем товар если количество <= 0
             this.items.splice(itemIndex, 1);
         } else {
             this.items[itemIndex].quantity = newQuantity;

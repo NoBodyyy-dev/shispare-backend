@@ -3,6 +3,8 @@ import {User} from '../models/User.model';
 import {APIError} from './error.service';
 
 export class UserService {
+
+
     async userExists(email: string): Promise<boolean> {
         return !!(await User.findOne({email}));
     }
@@ -17,7 +19,8 @@ export class UserService {
             fullName: data.fullName,
             email: data.email,
             password: hashedPassword,
-            type: 'IND'
+            type: 'IND',
+            personalKey: crypto.randomUUID(),
         });
         return this.mapUser(user);
     }
