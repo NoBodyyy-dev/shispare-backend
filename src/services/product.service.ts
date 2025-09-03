@@ -3,8 +3,21 @@ import {createCode, createSlug, toObjID} from "../utils/utils";
 import Category from "../models/Category.model";
 import {APIError} from "./error.service";
 import {IProduct} from "../interfaces/product.interface";
+import {NextFunction} from "express";
 
 export class ProductService {
+    async checkProducts(productIds: string[]) {
+        console.log(">>>", productIds);
+        const finalProducts = new Set();
+        for (const id of productIds) {
+            const product = await Product.findOne({_id: id});
+            if (!product) continue;
+            finalProducts.add(product);
+        }
+
+        return Array.from(finalProducts);
+    }
+
     async createProduct(productData: any): Promise<IProduct> {
         const slug = createSlug(productData.title);
         const article = createCode(10);

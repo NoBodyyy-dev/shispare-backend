@@ -14,6 +14,18 @@ export class ProductController {
         }
     }
 
+    checkProducts = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            console.log(req.body);
+            const {productIds} = req.body;
+            const checkedProducts = await this.productService.checkProducts(productIds);
+            console.log(checkedProducts);
+            res.status(200).json({products: checkedProducts});
+        } catch (e) {
+            next(e);
+        }
+    }
+
     getProductsByCategory = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const products = await this.productService.getProductsByCategory(req.params.slug);

@@ -1,4 +1,6 @@
 import mongoose, {Document, Schema, Types} from "mongoose";
+import {ICartProduct} from "../interfaces/product.interface";
+import {IPaymentMethodType} from "@a2seven/yoo-checkout";
 
 export enum OrderStatus {
     PENDING = "pending",           // Ожидает подтверждения
@@ -12,51 +14,49 @@ export enum OrderStatus {
 
 export enum DeliveryType {
     PICKUP = "pickup",             // Самовывоз
-    COURIER = "courier",           // Курьерская доставка
-    POST = "post",                 // Почта России
-    EXPRESS = "express"            // Экспресс-доставка
+    KRASNODAR = "krasnodar",       // Доставка по краснодару
+    RUSSIA = "russia",             // Доставка по России
 }
 
 export enum PaymentMethod {
     CARD = "card",                 // Оплата картой
     CASH = "cash",                 // Наличные при получении
     SBP = "sbp",                   // Система быстрых платежей
-    INVOICE = "invoice"            // По счету для юр. лиц
-}
-
-// Интерфейс для элемента заказа
-export interface IOrderItem {
-    product: Types.ObjectId;       // Ссылка на продукт
-    optionIndex: number;           // Индекс выбранной опции (цвет/размер)
-    quantity: number;              // Количество товара
-    price: number;                 // Цена на момент заказа (фиксируем)
-    discount?: number;             // Скидка на товар (%)
+    INVOICE = "invoice",            // По счету для юр. лиц
+    PAYINSHOP = "pay_in_shop"
 }
 
 // Интерфейс для данных доставки
 export interface IDeliveryInfo {
-    city: string;                  // Город
-    address: string;               // Адрес
-    postalCode?: string;           // Почтовый индекс
-    recipientName: string;         // ФИО получателя
-    phone: string;                 // Телефон получателя
-    comment?: string;              // Комментарий к доставке
+    city?: string;                  // Город (обязателен для доставки)
+    address?: string;               // Адрес (обязателен для доставки)
+    postalCode?: string;            // Почтовый индекс
+    recipientName?: string;         // ФИО получателя (обязателен для доставки)
+    phone: string;                  // Телефон получателя (всегда обязателен)
+    comment?: string;               // Комментарий к доставке
+}
+
+export interface IFinallyCartItems {
+    product: Types.ObjectId;
+    quantity: number;
 }
 
 // Основной интерфейс заказа
 export interface IOrder extends Document {
+    _id: Types.ObjectId;
     orderNumber: string;           // Уникальный номер заказа (генерируется)
     owner: Types.ObjectId;         // Пользователь, оформивший заказ
-    items: IOrderItem[];           // Состав заказа
+    items: IFinallyCartItems[];         // Состав заказа
     totalAmount: number;           // Общая сумма
+    totalProducts: number;         // Общее количество товаров
     discountAmount: number;        // Сумма скидки
-    deliveryCost: number;          // Стоимость доставки
     finalAmount: number;           // Итоговая сумма к оплате
     status: OrderStatus;           // Статус заказа
     deliveryType: DeliveryType;    // Способ доставки
     deliveryInfo: IDeliveryInfo;   // Данные доставки
-    paymentMethod: PaymentMethod;  // Способ оплаты
+    paymentMethod: IPaymentMethodType;  // Способ оплаты
     paymentStatus: boolean;        // Статус оплаты
+    paymentId: string;
     invoiceUrl?: string;           // Ссылка на счет/накладную
     trackingNumber?: string;       // Трек-номер для отслеживания
     createdAt: Date;               // Дата создания
@@ -76,24 +76,22 @@ const OrderSchema = new Schema<IOrder>({
     owner: {type: Schema.Types.ObjectId, ref: 'User', required: true, index: true},
     items: [{
         product: {type: Schema.Types.ObjectId, ref: 'Product', required: true},
-        optionIndex: {type: Number, required: true},
         quantity: {type: Number, required: true, min: 1},
-        price: {type: Number, required: true},
-        discount: {type: Number, default: 0, min: 0, max: 100}
     }],
     totalAmount: {type: Number, required: true, min: 0},
+    totalProducts: {type: Number, required: true, min: 0},
     discountAmount: {type: Number, default: 0, min: 0},
-    deliveryCost: {type: Number, required: true, min: 0},
+    paymentId: {type: String, required: true},
     finalAmount: {type: Number, required: true, min: 0},
     status: {type: String, enum: Object.values(OrderStatus), default: OrderStatus.PENDING},
     deliveryType: {type: String, enum: Object.values(DeliveryType), required: true},
     deliveryInfo: {
-        city: {type: String, required: true},
-        address: {type: String, required: true},
-        postalCode: {type: String},
-        recipientName: {type: String, required: true},
+        city: String,
+        address: String,
+        postalCode: String,
+        recipientName: String,
         phone: {type: String, required: true},
-        comment: {type: String}
+        comment: String
     },
     paymentMethod: {type: String, enum: Object.values(PaymentMethod), required: true},
     paymentStatus: {type: Boolean, default: false},
@@ -101,7 +99,7 @@ const OrderSchema = new Schema<IOrder>({
     trackingNumber: {type: String},
     cancelledAt: {type: Date},
     deliveredAt: {type: Date},
-    documentUrl: {type: String}
+    documentUrl: {type: String},
 }, {
     timestamps: true,
     versionKey: false

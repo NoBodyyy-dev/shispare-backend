@@ -6,4 +6,6 @@ const userController = new UserController();
 export const userRouter = express.Router()
 
 userRouter.get("/me", authMiddleware, userController.getMeFunc);
+userRouter.get("/get-user/all", authMiddleware, userController.getAllUsersFunc);
+userRouter.get("/get-user/:id", authMiddleware, userController.getOneUser);
 userRouter.put("/update", authMiddleware, userController.updateMeFunc);

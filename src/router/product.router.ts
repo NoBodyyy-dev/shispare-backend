@@ -4,9 +4,10 @@ import {adminMiddleware} from "../middleware/admin.middleware";
 import {ProductController} from "../controllers/product.controller";
 
 const productController = new ProductController();
-const productRouter = express.Router();
+export const productRouter = express.Router();
 
 productRouter.post("/create-product", productController.createProduct)
+productRouter.post("/check", productController.checkProducts)
 
 productRouter.get('/get-products-by-category/:slug', productController.getProductsByCategory)
 productRouter.get("/get-product/:slug", productController.getProduct);
@@ -19,5 +20,4 @@ productRouter.put("/update-product/:productID", [authMiddleware, adminMiddleware
 
 productRouter.delete("/delete-product/:productID", [authMiddleware, adminMiddleware], productController.deleteProduct);
 
-export default productRouter;
 

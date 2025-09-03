@@ -1,118 +1,112 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import fs from "fs";
-import path from "path";
-import { v4 as uuidv4 } from 'uuid';
-import { Readable } from "stream";
+import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
+import streamifier from "streamifier";
 
-export enum CloudFileType {
-    PDF = 'application/pdf',
-    JPEG = 'image/jpeg',
-    PNG = 'image/png'
-}
+export type CloudUploadResult = {
+    public_id: string;
+    version?: number;
+    signature?: string;
+    width?: number;
+    height?: number;
+    format?: string;
+    resource_type?: string;
+    created_at?: string;
+    tags?: string[];
+    bytes?: number;
+    type?: string;
+    etag?: string;
+    placeholder?: boolean;
+    url?: string;
+    secure_url?: string;
+};
 
-export interface ICloudService {
-    uploadFile(filePath: string, folder?: string, fileType?: CloudFileType): Promise<string>;
-    uploadBuffer(buffer: Buffer, folder?: string, fileType?: CloudFileType): Promise<string>;
-    uploadStream(stream: Readable, folder?: string, fileType?: CloudFileType): Promise<string>;
-    getSignedUrl(fileKey: string, expiresIn?: number): Promise<string>;
-    deleteFile(fileKey: string): Promise<void>;
-}
-
-export class YandexCloudService implements ICloudService {
-    private s3: S3Client;
-    private readonly bucketName: string;
-
+export class CloudService {
     constructor() {
-        this.s3 = new S3Client({
-            endpoint: process.env.YC_STORAGE_ENDPOINT || 'https://storage.yandexcloud.net',
-            region: process.env.YC_REGION || 'ru-central1',
-            credentials: {
-                accessKeyId: process.env.YC_ACCESS_KEY_ID || '',
-                secretAccessKey: process.env.YC_SECRET_ACCESS_KEY || ''
-            },
-            forcePathStyle: true
-        });
-
-        this.bucketName = process.env.YC_BUCKET_NAME || '';
-
-        if (!this.bucketName) {
-            throw new Error('YC_BUCKET_NAME is not defined in environment variables');
+        const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
+        if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+            throw new Error(
+                "Cloudinary environment variables are not set. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET"
+            );
         }
-    }
 
-    private generateFileKey(folder?: string, extension?: string): string {
-        const fileName = `${uuidv4()}${extension ? `.${extension}` : ''}`;
-        return folder ? `${folder}/${fileName}` : fileName;
-    }
-
-    async uploadFile(filePath: string, folder?: string, fileType: CloudFileType = CloudFileType.PDF): Promise<string> {
-        const fileContent = fs.readFileSync(filePath);
-        const extension = path.extname(filePath).substring(1);
-        const key = this.generateFileKey(folder, extension);
-
-        const command = new PutObjectCommand({
-            Bucket: this.bucketName,
-            Key: key,
-            Body: fileContent,
-            ContentType: fileType
+        cloudinary.config({
+            cloud_name: CLOUDINARY_CLOUD_NAME,
+            api_key: CLOUDINARY_API_KEY,
+            api_secret: CLOUDINARY_API_SECRET,
+            secure: true,
         });
-
-        await this.s3.send(command);
-        return `https://${this.bucketName}.storage.yandexcloud.net/${key}`;
     }
 
-    async uploadBuffer(buffer: Buffer, folder?: string, fileType: CloudFileType = CloudFileType.PDF): Promise<string> {
-        const key = this.generateFileKey(folder, fileType.split('/')[1]);
+    /**
+     * Upload a buffer (useful with multer.memoryStorage)
+     * @param buffer - file buffer
+     * @param options - cloudinary upload options (public_id, folder, transformation, etc.)
+     */
+    public uploadBuffer(
+        buffer: Buffer,
+        options: Record<string, unknown> = {}
+    ): Promise<CloudUploadResult> {
+        return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                options,
+                (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
+                    if (error) return reject(new Error(error.message));
+                    if (!result) return reject(new Error("Empty upload result from Cloudinary"));
+                    resolve(this.mapResult(result));
+                }
+            );
 
-        const command = new PutObjectCommand({
-            Bucket: this.bucketName,
-            Key: key,
-            Body: buffer,
-            ContentType: fileType
+            streamifier.createReadStream(buffer).pipe(uploadStream);
         });
-
-        await this.s3.send(command);
-        return `https://${this.bucketName}.storage.yandexcloud.net/${key}`;
     }
 
-    async uploadStream(stream: Readable, folder?: string, fileType: CloudFileType = CloudFileType.PDF): Promise<string> {
-        const key = this.generateFileKey(folder, fileType.split('/')[1]);
-
-        const command = new PutObjectCommand({
-            Bucket: this.bucketName,
-            Key: key,
-            Body: stream,
-            ContentType: fileType
-        });
-
-        await this.s3.send(command);
-        return `https://${this.bucketName}.storage.yandexcloud.net/${key}`;
+    /**
+     * Upload a local file by path
+     */
+    public async uploadFromPath(path: string, options: Record<string, unknown> = {}): Promise<CloudUploadResult> {
+        const result = (await cloudinary.uploader.upload(path, options)) as UploadApiResponse;
+        return this.mapResult(result);
     }
 
-    async getSignedUrl(fileKey: string, expiresIn: number = 3600): Promise<string> {
-        const command = new GetObjectCommand({
-            Bucket: this.bucketName,
-            Key: fileKey
-        });
-
-        return getSignedUrl(this.s3, command, { expiresIn });
+    /**
+     * Delete an asset by public_id
+     */
+    public async deleteByPublicId(publicId: string, options: Record<string, unknown> = {}): Promise<any> {
+        return cloudinary.uploader.destroy(publicId, options);
     }
 
-    async deleteFile(fileKey: string): Promise<void> {
-        const command = new DeleteObjectCommand({
-            Bucket: this.bucketName,
-            Key: fileKey
-        });
-
-        await this.s3.send(command);
+    /**
+     * Generate signed params for client-side direct upload (if you want signed uploads)
+     * returns { signature, timestamp }
+     */
+    public generateSignature(paramsToSign: Record<string, unknown> = {}): { timestamp: number; signature: string } {
+        const timestamp = Math.round(new Date().getTime() / 1000);
+        // cloudinary.utils.api_sign_request expects plain JS object with string/number values
+        const toSign: Record<string, unknown> = { ...paramsToSign, timestamp };
+        // @ts-ignore - types for api_sign_request are loose
+        const signature = cloudinary.utils.api_sign_request(toSign, process.env.CLOUDINARY_API_SECRET as string);
+        return { timestamp, signature };
     }
 
-    async extractKeyFromUrl(url: string): Promise<string> {
-        const baseUrl = `https://${this.bucketName}.storage.yandexcloud.net/`;
-        if (url.startsWith(baseUrl)) {
-            return url.substring(baseUrl.length);
-        }
-        throw new Error('Invalid Yandex Cloud Storage URL format');
+    /**
+     * Helper to map UploadApiResponse -> CloudUploadResult
+     */
+    private mapResult(result: UploadApiResponse): CloudUploadResult {
+        return {
+            public_id: result.public_id,
+            version: result.version,
+            signature: result.signature,
+            width: result.width,
+            height: result.height,
+            format: result.format,
+            resource_type: result.resource_type,
+            created_at: result.created_at,
+            tags: result.tags,
+            bytes: result.bytes,
+            type: result.type,
+            etag: result.etag,
+            placeholder: result.placeholder,
+            url: result.url,
+            secure_url: result.secure_url,
+        };
     }
 }

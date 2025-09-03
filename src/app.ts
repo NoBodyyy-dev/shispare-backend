@@ -6,25 +6,30 @@ import mongoose from "mongoose";
 import * as http from "node:http";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import {Server} from "socket.io";
 import config from "./config/config";
 import bot from "./bot"
-// import {app, server} from "./socket /socket";
 import {errorMiddleware, notFoundMiddleware} from "./middleware/error.middleware";
 import {router} from "./router/router";
-import {socketAuthMiddleware} from "./middleware/auth.middleware";
-import {User} from "./models/User.model";
+import {Server} from "socket.io";
+import {SocketService} from "./services/socket.service";
+import {OrderService} from "./services/order.service";
 
-export const app = express();
-export const server = http.createServer(app);
+const app = express();
+const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: config.CLIENT_URL,
-        methods: ['GET', 'POST'],
+        origin: "*",
+        methods: "*",
+        credentials: true
     },
+    connectionStateRecovery: {
+        maxDisconnectionDuration: 2 * 60 * 1000 // 2 минуты
+    }
 });
-io.use(socketAuthMiddleware);
+
+export const socketService = new SocketService(io);
+export const orderService = new OrderService(socketService);
 
 app.use(express.json());
 app.use(cookieParser(config.COOKIE_SECRET));

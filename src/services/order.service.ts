@@ -1,348 +1,214 @@
-import {Server} from "socket.io";
-import PDFDocument from "pdfkit";
-
-import {Order, OrderStatus, DeliveryType, IOrder} from "../models/Order.model";
+import mongoose from "mongoose";
+import {IPaymentMethodType} from "@a2seven/yoo-checkout";
+import {DeliveryType, IOrder, Order, OrderStatus, PaymentMethod} from "../models/Order.model";
+import {IUser, User} from "../models/User.model";
 import {Cart} from "../models/Cart.model";
-import {User} from "../models/User.model";
-import {YandexCloudService, CloudFileType} from "./cloud.service";
 import {SenderService} from "./sender.service";
-import cloud from "../config/cloud.config"
+import {PaymentService} from "./payment.service";
+import {APIError} from "./error.service";
+import {SocketService} from "./socket.service";
 
 export class OrderService {
-    private cloudService: YandexCloudService;
     private senderService: SenderService;
-    private io?: Server;
+    private paymentService: PaymentService;
+    private socketService: SocketService;
 
-    constructor(io?: Server) {
-        this.cloudService = new YandexCloudService();
+    constructor(socketService: SocketService) {
         this.senderService = new SenderService();
-        this.io = io;
+        this.paymentService = new PaymentService();
+        this.socketService = socketService;
     }
 
-    /**
-     * Создает новый заказ из корзины пользователя
-     */
-    async createOrderFromCart(
-        userId: string,
+    async createOrder(
+        user: IUser,
+        deliveryInfo: IOrder["deliveryInfo"],
         deliveryType: DeliveryType,
-        discount: number = 0,
-        socketId?: string
-    ): Promise<IOrder> {
+        paymentMethod: PaymentMethod,
+    ) {
+        const recipientPhone = deliveryInfo.phone;
+        const recipientName = deliveryInfo.recipientName;
+        this.validateOrderData(deliveryType, deliveryInfo);
+
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
         try {
-            this.sendProgress(socketId, "Начинаем обработку заказа", 10);
+            const cart = await Cart.findOne({owner: user._id});
+            if (!cart) throw APIError.NotFound({message: "Корзина не найдена"});
+            if (!cart.products.length) throw APIError.BadRequest({message: "Корзина пуста"});
 
-            const [cart, user] = await Promise.all([
-                Cart.findOne({owner: userId}).populate("items.product"),
-                User.findById(userId),
-            ]);
+            await this.validateStockAvailability(cart);
 
-            if (!cart || cart.items.length === 0) throw new Error("Корзина пуста");
-            if (!user) throw new Error("Пользователь не найден");
-
-            this.sendProgress(socketId, "Расчет стоимости", 30);
-            const {totalPrice, finalPrice} = this.calculateOrderPrices(
-                cart.items,
-                discount
-            );
-
-            this.sendProgress(socketId, "Генерация документа", 50);
-            const pdfBuffer = await this.generateOrderPdf({
-                user,
-                items: cart.items,
-                totalPrice,
-                discount,
-                finalPrice,
+            const order = new Order({
+                owner: user._id,
+                items: cart.products.map(p => ({
+                    product: p.product,
+                    quantity: p.quantity
+                })),
+                totalAmount: cart.totalAmount,
+                totalProducts: cart.totalProducts,
+                discountAmount: cart.discountAmount,
+                finalAmount: cart.finalAmount,
+                status: OrderStatus.PROCESSING,
                 deliveryType,
+                deliveryInfo,
+                paymentMethod,
+                paymentStatus: false,
+                paymentId: "",
+                documentUrl: "",
             });
 
-            this.sendProgress(socketId, "Сохранение документа", 70);
-            const pdfUrl = await this.cloudService.uploadBuffer(
-                pdfBuffer,
-                "orders",
-                CloudFileType.PDF
-            );
 
-            this.sendProgress(socketId, "Создание заказа", 90);
-            const order = await this.saveOrder(
-                userId,
-                cart.items,
-                {
-                    totalPrice,
-                    discount,
-                    finalPrice,
-                    deliveryType,
-                    pdfUrl,
-                },
-                socketId
-            );
+            if (paymentMethod !== PaymentMethod.CASH && paymentMethod !== PaymentMethod.INVOICE && paymentMethod !== PaymentMethod.PAYINSHOP) {
+                const yooKassaPaymentType = this.mapPaymentMethodToYooKassa(paymentMethod);
 
-            await this.senderService.sendMessagesAboutCreatedOrder({
-                to: user.email,
-                items: order.items,
-                orderNumber: order.orderNumber,
-                telegramId: user.telegramId
-            })
+                const payment = await this.paymentService.createPayment({
+                    paymentData: {
+                        amount: cart.finalAmount.toString(),
+                        type: yooKassaPaymentType
+                    },
+                    orderData: {
+                        orderId: order._id.toString(),
+                        description: `Заказ №${order.orderNumber}`
+                    }
+                });
 
-            this.sendProgress(socketId, "Заказ создан", 100);
-            return order.toObject();
+                order.paymentId = payment.id;
+            }
+
+            await order.save();
+
+            cart.products = [];
+            cart.totalAmount = 0;
+            cart.totalProducts = 0;
+            cart.discountAmount = 0;
+            cart.finalAmount = 0;
+            await cart.save();
+
+            await session.commitTransaction();
+            await session.endSession();
+
+            setTimeout(async () => {
+                order.status = OrderStatus.PENDING;
+                await order.save();
+
+                this.socketService.notifyOrderUpdate(order._id.toString(), {
+                    ownerId: user._id.toString(),
+                    status: OrderStatus.PENDING,
+                });
+
+                await this.senderService.sendMessagesAboutCreatedOrder({
+                    to: user.email,
+                    orderId: order._id.toString(),
+                    orderNumber: order.orderNumber,
+                    telegramId: user.telegramId
+                });
+            }, 1000);
+
+            return {
+                order,
+                paymentUrl: order.paymentId ? (await this.paymentService.getPaymentUrl(order.paymentId)) : null
+            };
         } catch (error) {
-            this.sendError(socketId, (error as { message: string }).message);
+            await session.abortTransaction();
+            await session.endSession();
             throw error;
         }
     }
 
-    /**
-     * Получает заказы пользователя
-     */
-    async getUserOrders(userId: string) {
-        return Order.find({owner: userId})
-            .populate({
-                path: "items.product",
-                model: "Product",
-            })
-            .populate("owner")
-            .sort({createdAt: -1});
-    }
-
-    /**
-     * Получает заказ по ID
-     */
-    async getOrderById(orderId: string) {
-        return Order.findById(orderId)
-            .populate({
-                path: "items.product",
-                model: "Product",
-            })
-            .populate("owner");
-    }
-
-    /**
-     * Обновляет статус заказа
-     */
-    async updateOrderStatus(
-        orderId: string,
-        status: OrderStatus,
-        notifyUser: boolean = true
+    private validateOrderData(
+        deliveryType: DeliveryType,
+        deliveryInfo: IOrder["deliveryInfo"],
     ) {
-        const order = await Order.findByIdAndUpdate(
-            orderId,
-            {$set: {status}},
-            {new: true}
-        )
-            .populate("owner")
-            .populate({
-                path: "items.product",
-                model: "Product",
-            });
+        if (!deliveryInfo.phone || !/^\+?[0-9\s\-\(\)]{10,}$/.test(deliveryInfo.phone)) {
+            throw APIError.BadRequest({message: "Некорректный номер телефона получателя"});
+        }
 
-        if (!order) throw new Error("Заказ не найден");
+        if (deliveryType !== DeliveryType.PICKUP) {
+            if (!deliveryInfo.city || !deliveryInfo.address) {
+                throw APIError.BadRequest({message: "Для доставки обязательны город и адрес"});
+            }
+        }
 
-        if (notifyUser) this.notifyUserAboutStatusChange(order.owner._id.toString(), order);
-
-        return order;
+        if (deliveryType === DeliveryType.PICKUP) {
+            if (!deliveryInfo.phone) {
+                throw APIError.BadRequest({message: "Для самовывоза обязателен номер телефона"});
+            }
+        }
     }
 
-    /**
-     * Устанавливает дату доставки
-     */
-    async setDeliveryDate(orderId: string, date: Date) {
-        return Order.findByIdAndUpdate(
-            orderId,
-            {$set: {deliveryDate: date}},
-            {new: true}
-        );
+    private async validateStockAvailability(cart: any) {
+        for (const item of cart.products) {
+            const product = await mongoose.model('Product').findById(item.product);
+            if (!product) {
+                throw APIError.BadRequest({message: `Товар ${item.product} не найден`});
+            }
+
+            const variant = product.variants[product.variantIndex];
+            if (!variant) {
+                throw APIError.BadRequest({message: `Вариант товара ${product.title} не найден`});
+            }
+
+            if (variant.countInStock < item.quantity) {
+                throw APIError.BadRequest({
+                    message: `Недостаточно товара ${product.title} на складе. Доступно: ${variant.countInStock}, запрошено: ${item.quantity}`
+                });
+            }
+        }
     }
 
-    /**
-     * Получает все заказы (для администратора)
-     */
-    async getAllOrders(filter: any = {}) {
-        return Order.find(filter)
-            .populate({
-                path: "items.product",
-                model: "Product",
-            })
-            .populate("owner")
-            .sort({createdAt: -1});
+    private mapPaymentMethodToYooKassa(paymentMethod: PaymentMethod): IPaymentMethodType {
+        switch (paymentMethod) {
+            case PaymentMethod.CARD:
+                return 'bank_card';
+            case PaymentMethod.SBP:
+                return 'sbp';
+            default:
+                return 'bank_card'; // По умолчанию карта
+        }
     }
 
-    /**
-     * Получает временную ссылку на PDF заказа
-     */
-    async getOrderPdfUrl(orderId: string, expiresIn: number = 3600) {
+    async updateOrderStatus(orderId: string, newStatus: OrderStatus) {
         const order = await Order.findById(orderId);
-        if (!order) throw new Error("Заказ не найден");
+        if (!order) throw APIError.NotFound({message: "Заказ не найден"});
 
-        return this.cloudService.getSignedUrl(
-            this.extractFileKeyFromUrl(order.documentUrl),
-            expiresIn
-        );
-    }
-
-    async updateOrderDeliveryAndPayment(
-        orderId: string,
-        data: {
-            deliveryInfo: any;
-            paymentMethod: string;
+        if (newStatus === OrderStatus.CANCELLED && order.paymentId) {
+            await this.paymentService.cancelPayment(order.paymentId);
+            order.cancelledAt = new Date();
         }
-    ) {
-        return Order.findByIdAndUpdate(
-            orderId,
-            {
-                $set: {
-                    deliveryInfo: data.deliveryInfo,
-                    paymentMethod: data.paymentMethod
-                }
-            },
-            {new: true}
-        )
-            .populate('items.product')
-            .populate('user');
-    }
 
-    private async saveOrder(
-        userId: string,
-        items: any[],
-        orderData: {
-            totalPrice: number;
-            discount: number;
-            finalPrice: number;
-            deliveryType: DeliveryType;
-            pdfUrl: string;
-        },
-        socketId?: string
-    ) {
-        const order = new Order({
-            owner: userId,
-            items: items.map((item) => ({
-                product: item.product._id,
-                optionIndex: item.optionIndex,
-                quantity: item.quantity,
-            })),
-            totalPrice: orderData.totalPrice,
-            discount: orderData.discount,
-            finalPrice: orderData.finalPrice,
-            documentUrl: orderData.pdfUrl,
-            deliveryType: orderData.deliveryType,
-            status: OrderStatus.PENDING,
-        });
+        if (newStatus === OrderStatus.DELIVERED && order.paymentId && !order.paymentStatus) {
+            await this.paymentService.capturePayment(order.paymentId);
+            order.paymentStatus = true;
+            order.deliveredAt = new Date();
+        }
 
+        order.status = newStatus;
         await order.save();
-        await Cart.updateOne({owner: userId}, {$set: {items: []}});
 
-        await this.notifyAdminsAboutNewOrder(order);
+        const user = await User.findById(order.owner);
+        if (user) {
+            await this.senderService.sendEmail({
+                to: user.email,
+                subject: `Статус вашего заказа №${order.orderNumber} изменён`,
+                html: `<p>Новый статус заказа: <b>${newStatus}</b></p>`
+            });
+        }
+
+        this.socketService.notifyOrderUpdate(order._id.toString(), {
+            ownerId: order.owner.toString(),
+            status: newStatus,
+        });
 
         return order;
     }
 
-    private calculateOrderPrices(items: any[], discount: number) {
-        const totalPrice = items.reduce((sum, item) => {
-            const product = item.product as any;
-            const option = product.options[item.optionIndex];
-            return sum + option.price * item.quantity;
-        }, 0);
-
-        const finalPrice = totalPrice * (1 - discount / 100);
-
-        return {totalPrice, finalPrice};
+    async getAllOrders() {
+        return Order.find().populate("owner").populate("items.product");
     }
 
-    private async generateOrderPdf(orderData: {
-        user: any;
-        items: any[];
-        totalPrice: number;
-        discount: number;
-        finalPrice: number;
-        deliveryType: DeliveryType;
-    }) {
-        return new Promise<Buffer>((resolve) => {
-            const doc = new PDFDocument();
-            const chunks: Uint8Array[] = [];
-
-            doc.on("data", (chunk) => chunks.push(chunk));
-            doc.on("end", () => resolve(Buffer.concat(chunks)));
-
-            // Заголовок
-            doc.fontSize(20).text(`Заказ №${Date.now()}`, {align: "center"});
-            doc.moveDown();
-
-            // Информация о клиенте
-            doc
-                .fontSize(14)
-                .text(`Клиент: ${orderData.user.name || orderData.user.email}`)
-                .text(`Дата: ${new Date().toLocaleDateString("ru-RU")}`);
-
-            doc.moveDown();
-            doc.fontSize(16).text("Состав заказа:", {underline: true});
-            doc.moveDown();
-
-            // Список товаров
-            orderData.items.forEach((item, index) => {
-                const product = item.product;
-                const option = product.options[item.optionIndex];
-                doc
-                    .fontSize(12)
-                    .text(
-                        `${index + 1}. ${product.title} (${option.color}) - ${
-                            item.quantity
-                        } × ${option.price} ₽ = ${item.quantity * option.price} ₽`
-                    );
-            });
-
-            // Итоговая информация
-            doc.moveDown();
-            doc
-                .fontSize(14)
-                .text(`Итого: ${orderData.totalPrice.toLocaleString("ru-RU")} ₽`)
-                .text(`Скидка: ${orderData.discount}%`)
-                .text(
-                    `К оплате: ${orderData.finalPrice.toLocaleString("ru-RU")} ₽`
-                )
-                .text(`Тип доставки: ${orderData.deliveryType}`)
-                .text(`Статус: ${OrderStatus.PENDING}`);
-
-            doc.end();
-        });
+    async getUserOrders(userId: string) {
+        return Order.findOne({owner: userId}).populate("owner").populate("items.product");
     }
 
-    private extractFileKeyFromUrl(url: string): string {
-        const baseUrl = `https://${cloud.YC_BUCKET_NAME}.storage.yandexcloud.net/`;
-        if (url.startsWith(baseUrl)) {
-            return url.substring(baseUrl.length);
-        }
-        throw new Error("Invalid Yandex Cloud Storage URL format");
-    }
-
-    // ============ Socket методы ============
-
-    private sendProgress(
-        socketId: string | undefined,
-        message: string,
-        percent: number
-    ) {
-        if (!socketId) return;
-        this.io!.to(socketId).emit("order:progress", {message, percent});
-    }
-
-    private sendError(socketId: string | undefined, error: string) {
-        if (!socketId) return;
-        this.io!.to(socketId).emit("order:error", {error});
-    }
-
-    private async notifyAdminsAboutNewOrder(order: IOrder) {
-        const adminSockets = await this.io!.in("admin").fetchSockets();
-        if (adminSockets.length === 0) return;
-
-        const populatedOrder = await Order.findById(order._id)
-            .populate("items.product")
-            .populate("owner");
-
-        this.io!.to("admin").emit("order:new", populatedOrder);
-    }
-
-    private notifyUserAboutStatusChange(userId: string, order: any) {
-        this.io!
-            .to(`user_${userId}`)
-            .emit("order:status-updated", {orderId: order._id, status: order.status});
-    }
 }

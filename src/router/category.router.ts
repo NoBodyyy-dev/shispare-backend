@@ -7,7 +7,7 @@ import {APIError} from "../services/error.service";
 import axios from "axios";
 import Category from "../models/Category.model";
 
-const categoryRouter = Router();
+export const categoryRouter = Router();
 
 categoryRouter.post("/create", [authMiddleware, adminMiddleware], asyncHandler(controller.createCategory))
 categoryRouter.get("/get-all", asyncHandler(controller.getAllCategories));
@@ -60,5 +60,3 @@ categoryRouter.post("/insert-items", asyncHandler(async (req: express.Request, r
         next(e);
     }
 }))
-
-export default categoryRouter;

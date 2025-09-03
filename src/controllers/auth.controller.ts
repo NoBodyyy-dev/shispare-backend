@@ -28,9 +28,9 @@ export class AuthController {
 
     public registerFunc = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            await APIError.catchError(req, res, next);
+            const isValid = await APIError.catchError(req, res, next);
+            if (!isValid) return;
             const result = await this.authService.register(req.body);
-            console.log(result);
             res.cookie("ss_id", result.sessionToken, {
                 httpOnly: true,
                 secure: false,
@@ -49,9 +49,6 @@ export class AuthController {
             const ss_id = req.signedCookies["ss_id"];
             const {code} = req.body;
 
-            console.log(code)
-            console.log(ss_id);
-            console.log(req.cookies);
             const tokens = await this.authService.verifyCode(ss_id, code);
 
             res.cookie('refreshToken', tokens.refreshToken, {

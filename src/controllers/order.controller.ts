@@ -1,34 +1,70 @@
-import {OrderService} from "../services/order.service";
-import {Request, Response, NextFunction} from "express";
+// controllers/order.controller.ts
+import { Request, Response, NextFunction } from "express";
+import {orderService} from "../app"
+import { OrderStatus } from "../models/Order.model";
+import {APIError} from "../services/error.service";
 
 export class OrderController {
-    constructor(private readonly orderService: OrderService = new OrderService()) {
-    }
-
-    public async getUserOrders(req: Request, res: Response, next: NextFunction) {
+    static async getUserOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const result = await this.orderService.getUserOrders(req.user!._id.toString())
-            res.status(200).json({orders: result});
-        } catch (e) {
-            next(e);
+            const orders = await orderService.getUserOrders(req.user!._id.toString());
+            res.json(orders);
+        } catch (err) {
+            next(err);
         }
     }
 
-    public async getOrderById(req: Request, res: Response, next: NextFunction) {
+    static async createOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const result = await this.orderService.getOrderById(req.params.id);
-            res.status(200).json({order: result});
-        } catch (e) {
-            next(e);
+            const {
+                deliveryInfo, 
+                deliveryType, 
+                paymentMethod,
+            } = req.body;
+
+            if (!deliveryType || !paymentMethod || !deliveryInfo.phone) {
+                throw APIError.BadRequest({message: "Нет обязательных полей"});
+            }
+
+            const order = await orderService.createOrder(
+                req.user!, 
+                deliveryInfo, 
+                deliveryType, 
+                paymentMethod, 
+            );
+
+            console.log(order);
+            
+            res.status(201).json({
+                order,
+                success: true
+            });
+        } catch (err) {
+            next(err);
         }
     }
 
-    public async getAllOrders(req: Request, res: Response, next: NextFunction) {
+    static async updateOrderStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const result = await this.orderService.getAllOrders(req.body.filter);
-            res.status(200).json({orders: result});
-        } catch (e) {
-            next(e);
+            const { orderId } = req.params;
+            const { status } = req.body;
+
+            if (!orderId || !status) {
+                res.status(400).json({
+                    success: false,
+                    message: "Обязательные поля: orderId, status"
+                });
+                return;
+            }
+
+            const order = await orderService.updateOrderStatus(orderId, status);
+            
+            res.json({
+                success: true,
+                data: order
+            });
+        } catch (err) {
+            next(err);
         }
     }
 }

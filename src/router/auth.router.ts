@@ -3,7 +3,7 @@ import {asyncHandler} from "../utils/utils";
 import {check} from "express-validator"
 import {AuthController} from "../controllers/auth.controller";
 
-const authRouter = Router();
+export const authRouter = Router();
 const authController = new AuthController();
 
 authRouter.post("/register", authController.registerFunc);
@@ -15,5 +15,4 @@ authRouter.post("/logout", authController.logoutFunc)
 
 authRouter.get("/refresh", authController.refreshFunc);
 
-export default authRouter;
 

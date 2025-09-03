@@ -1,9 +1,15 @@
 import {Router} from "express";
+import {CartController} from "../controllers/cart.controller";
+import {authMiddleware} from "../middleware/auth.middleware";
 
-const cartRouter = Router();
+export const cartRouter = Router();
 
-cartRouter.get("/", (req, res) => {
-    res.status(200).send({message: "Cart is running"});
-})
+const cartController = new CartController();
 
-export default cartRouter;
+cartRouter.use(authMiddleware);
+
+cartRouter.get("/get", cartController.getCart);
+cartRouter.post("/add-to-cart", cartController.addToCart);
+cartRouter.put("/update-quantity", cartController.updateQuantity);
+cartRouter.delete("/remove-from-cart", cartController.removeFromCart);
+cartRouter.delete("/clear", cartController.clearCart);

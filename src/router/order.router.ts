@@ -1,12 +1,12 @@
 import {Router} from "express";
-import {OrderController} from "../controllers/order.controller";
 import {authMiddleware} from "../middleware/auth.middleware";
-import {adminMiddleware} from "../middleware/admin.middleware";
+import {validateOrderCreation, validateOrderUpdate} from "../middleware/order.middleware";
+import {OrderController} from "../controllers/order.controller";
 
-const orderController = new OrderController();
 export const orderRouter = Router();
 
-orderRouter.get("/get-order/all", [authMiddleware, adminMiddleware], orderController.getAllOrders)
-orderRouter.get("/get-order/user", [authMiddleware], orderController.getUserOrders);
-orderRouter.get("/get-order/:id", [authMiddleware], orderController.getOrderById);
+orderRouter.get("/get-user-orders", authMiddleware, OrderController.getUserOrders);
+orderRouter.post("/create", [authMiddleware], OrderController.createOrder);
+orderRouter.patch("/:orderId/status", [authMiddleware, validateOrderUpdate], OrderController.updateOrderStatus);
+
 

@@ -132,11 +132,12 @@ export class APIError extends Error {
         };
     }
 
-    public static async catchError(req: express.Request, res: express.Response, next: express.NextFunction) {
+    public static async catchError(req: express.Request, res: express.Response, next: express.NextFunction): Promise<boolean> {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             next(APIError.BadRequest({message: "Ошибка валидации", errors: errors.array()}));
-            return
+            return false; // Возвращаем false при ошибке
         }
+        return true; // Возвращаем true при успехе
     };
 }

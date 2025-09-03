@@ -27,8 +27,6 @@ export class SessionService {
 
     async verifyCode(token: string, code: string) {
         const session = await Session.findOne({token}).populate('user');
-        console.log(token)
-        console.log(session)
         if (!session) throw APIError.Unauthorized();
         if (Date.now() > session.expires.getTime()) throw APIError.Forbidden({message: 'Время подтверждения кода вышло'});
         if (code !== session.code) throw APIError.BadRequest({message: 'Неверный код подтверждения'});

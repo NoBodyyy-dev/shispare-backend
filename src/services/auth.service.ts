@@ -4,6 +4,7 @@ import {TokenService} from './token.service';
 import {CompanyValidationService} from './validator.service';
 import {APIError} from './error.service';
 import {SenderService} from './sender.service';
+import {CartService} from "./cart.service";
 
 interface RegisterData {
     type: 'IND' | 'LGL';
@@ -20,6 +21,7 @@ export class AuthService {
     private tokenService: TokenService;
     private companyValidator: CompanyValidationService;
     private senderService: SenderService;
+    private cartService: CartService;
 
     constructor() {
         this.userService = new UserService();
@@ -27,11 +29,11 @@ export class AuthService {
         this.tokenService = new TokenService();
         this.companyValidator = new CompanyValidationService();
         this.senderService = new SenderService();
+        this.cartService = new CartService();
     }
 
     async register(data: RegisterData) {
         this.validateRegistrationData(data);
-        console.log(data)
 
         if (await this.userService.userExists(data.email))
             throw APIError.BadRequest({message: 'Пользователь с таким email уже существует'});
@@ -44,15 +46,16 @@ export class AuthService {
             role: user.role
         });
 
-        const code = this.sessionService.generateCode();
-        console.log(code)
-        await this.sessionService.createSession({
-            userId: user.id,
-            token: sessionToken,
-            code
-        });
-
-        await this.senderService.sendVerificationEmail({email: data.email, code: code})
+        const code: string = this.sessionService.generateCode();
+        await Promise.all([
+            this.sessionService.createSession({
+                userId: user.id,
+                token: sessionToken,
+                code
+            }),
+            this.senderService.sendVerificationEmail({email: data.email, code: code}),
+            this.cartService.initialCart(user.id)
+        ])
 
         return {sessionToken};
     }

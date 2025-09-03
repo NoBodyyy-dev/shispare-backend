@@ -32,6 +32,6 @@ export const socketAuthMiddleware = async (socket: Socket, next: (err?: Extended
         socket.user = user;
         next();
     } catch (error) {
-        next(new Error("Authentication error"));
+        next(new Error("Ошибка авторизации сокетов"));
     }
 }

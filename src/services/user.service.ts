@@ -3,8 +3,6 @@ import {User} from '../models/User.model';
 import {APIError} from './error.service';
 
 export class UserService {
-
-
     async userExists(email: string): Promise<boolean> {
         return !!(await User.findOne({email}));
     }
@@ -51,7 +49,8 @@ export class UserService {
         if (!user)
             throw APIError.NotFound({message: 'Пользователь не найден'});
 
-
+        console.log(password);
+        console.log(user.password);
         const isValid = bcrypt.compareSync(password, user.password);
         if (!isValid) {
             throw APIError.BadRequest({message: 'Неверный пароль'});
@@ -61,7 +60,7 @@ export class UserService {
     }
 
     async getUserById(id: string) {
-        const user = await User.findById(id);
+        const user = await User.findById(id).select("-password");
         if (!user)
             throw APIError.NotFound({message: 'Пользователь не найден'});
 
@@ -87,5 +86,9 @@ export class UserService {
         user.fullName = body.fullName;
         await user.save();
         return user;
+    }
+
+    async getAllUsers() {
+        return User.find().select("-password");
     }
 }

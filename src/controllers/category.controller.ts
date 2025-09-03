@@ -6,6 +6,7 @@ import {Product} from "../models/Product.model";
 
 export const createCategory = async (req: Request, res: Response, next: NextFunction) => {
     const {title} = req.body;
+    console.log(req.body);
     const slug = createSlug(title);
 
     try {
