@@ -1,144 +1,122 @@
-import {Cart} from "../models/Cart.model";
-import {APIError} from "./error.service";
-import {Product} from "../models/Product.model";
-import {toObjID} from "../utils/utils";
-import {ProductService} from "./product.service";
+import { Cart } from "../models/Cart.model";
+import { Product } from "../models/Product.model";
+import { APIError } from "./error.service";
+import { toObjID } from "../utils/utils";
 
 export class CartService {
-    private productService: ProductService
-
-    constructor() {
-        this.productService = new ProductService();
-    }
-
+    /**
+     * Инициализация корзины при первом обращении
+     */
     async initialCart(owner: string) {
-        return Cart.create({owner});
+        let cart = await Cart.findOne({ owner });
+        if (!cart) {
+            cart = new Cart({ owner, items: [] });
+            await cart.save();
+        }
+        return cart;
     }
 
+    /**
+     * Получение корзины пользователя
+     */
     async getUserCart(owner: string) {
-        return Cart.findOne({owner})
-            .populate({
-                path: "products.product",
-                populate: {
-                    path: "category",
-                    select: "name slug"
-                }
-            });
+        const cart = await this.initialCart(owner);
+        await cart.recalcCart();
+        return cart;
     }
 
-    async addToCart(productId: string, owner: string, quantity: number = 1) {
-        try {
-            let cart = await Cart.findOne({owner});
-            const product = await Product.findById(productId);
+    /**
+     * Добавление товара по артикулу
+     */
+    async addToCart({
+                        owner,
+                        productId,
+                        article,
+                        quantity,
+                    }: {
+        owner: string;
+        productId: string;
+        article: number;
+        quantity: number;
+    }) {
+        if (quantity <= 0)
+            throw APIError.BadRequest({ message: "Количество должно быть больше 0" });
 
-            if (!product) throw APIError.NotFound({message: "Товар не найден!"});
-            if (!cart) cart = await this.initialCart(owner);
+        const product = await Product.findById(productId);
+        if (!product) throw APIError.NotFound({ message: "Товар не найден" });
 
-            const existingProduct = cart.products.find(
-                item => item.product.toString() === productId
-            );
+        const variant = product.variants.find(v => v.article === article);
+        if (!variant)
+            throw APIError.NotFound({ message: "Артикул не найден в товаре" });
 
-            if (existingProduct) {
-                existingProduct.quantity += quantity;
-                existingProduct.addedAt = new Date();
-            } else {
-                cart.products.push({
-                    product: toObjID(productId),
-                    quantity,
-                    addedAt: new Date()
-                });
-            }
+        if (variant.countInStock < quantity)
+            throw APIError.BadRequest({ message: "Недостаточно товара на складе" });
 
-            await cart.recalculateCart();
-            await cart.save();
+        const cart = await this.initialCart(owner);
+        await cart.addItem(toObjID(productId), article, quantity);
 
-            return cart.populate({
-                path: "products.product",
-                populate: {
-                    path: "category",
-                    select: "name slug"
-                }
-            });
-        } catch (e) {
-            throw APIError.InternalServerError({message: (e as Error).message});
-        }
+        return await cart.recalcCart();
     }
 
-    async updateQuantity(productId: string, owner: string, newQuantity: number) {
-        try {
-            if (newQuantity < 1) {
-                throw APIError.BadRequest({message: "Количество должно быть не менее 1"});
-            }
+    /**
+     * Обновление количества по артикулу
+     */
+    async updateQuantity({
+                             owner,
+                             productId,
+                             article,
+                             quantity,
+                         }: {
+        owner: string;
+        productId: string;
+        article: number;
+        quantity: number;
+    }) {
+        if (quantity < 1)
+            throw APIError.BadRequest({ message: "Количество должно быть не менее 1" });
 
-            const cart = await this.getUserCart(owner);
-            if (!cart) throw APIError.NotFound({message: "Корзина не найдена!"});
+        const product = await Product.findById(productId);
+        if (!product) throw APIError.NotFound({ message: "Товар не найден" });
 
-            const product = cart.products.find(
-                item => item.product._id.toString() === productId
-            );
+        const variant = product.variants.find(v => v.article === article);
+        if (!variant)
+            throw APIError.NotFound({ message: "Артикул не найден в товаре" });
 
-            if (!product) throw APIError.NotFound({message: "Товар не найден в корзине!"});
+        if (variant.countInStock < quantity)
+            throw APIError.BadRequest({ message: "Недостаточно товара на складе" });
 
-            product.quantity = newQuantity;
-            product.addedAt = new Date();
+        const cart = await Cart.findOne({ owner });
+        if (!cart) throw APIError.NotFound({ message: "Корзина не найдена" });
 
-            await cart.save();
-
-            // Исправлено: дожидаемся выполнения populate и возвращаем результат
-            return await cart.populate({
-                path: "products.product",
-                populate: {
-                    path: "category",
-                    select: "name slug"
-                }
-            });
-        } catch (e) {
-            throw APIError.InternalServerError({message: (e as Error).message});
-        }
+        await cart.updateQuantity(toObjID(productId), article, quantity);
+        return await cart.recalcCart();
     }
 
-    async removeFromCart(productId: string, owner: string) {
-        try {
-            const cart = await Cart.findOne({owner});
-            if (!cart) throw APIError.NotFound({message: "Корзина не найдена!"});
+    /**
+     * Удаление позиции по артикулу
+     */
+    async removeFromCart({
+                             owner,
+                             productId,
+                             article,
+                         }: {
+        owner: string;
+        productId: string;
+        article: number;
+    }) {
+        const cart = await Cart.findOne({ owner });
+        if (!cart) throw APIError.NotFound({ message: "Корзина не найдена" });
 
-            const initialLength = cart.products.length;
-            cart.products = cart.products.filter(
-                item => item.product.toString() !== productId
-            );
-
-            if (cart.products.length === initialLength) {
-                throw APIError.NotFound({message: "Товар не найден в корзине!"});
-            }
-
-            await cart.recalculateCart();
-            await cart.save();
-
-            return cart.populate({
-                path: "products.product",
-                populate: {
-                    path: "category",
-                    select: "name slug"
-                }
-            });
-        } catch (e) {
-            throw APIError.InternalServerError({message: (e as Error).message});
-        }
+        await cart.removeItem(toObjID(productId), article);
+        return await cart.recalcCart();
     }
 
+    /**
+     * Очистка корзины
+     */
     async clearCart(owner: string) {
-        try {
-            const cart = await Cart.findOne({owner});
-            if (!cart) throw APIError.NotFound({message: "Корзина не найдена!"});
-
-            cart.products = [];
-
-            await cart.recalculateCart();
-            await cart.save();
-
-            return cart;
-        } catch (e) {
-            throw APIError.InternalServerError({message: (e as Error).message});
-        }
+        const cart = await this.initialCart(owner);
+        await cart.clearCart();
+        return cart;
     }
 }

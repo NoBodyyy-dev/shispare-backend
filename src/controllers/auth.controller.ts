@@ -13,14 +13,18 @@ export class AuthController {
         try {
             await APIError.catchError(req, res, next);
             const result = await this.authService.login(req.body);
-            res.cookie("ss_id", result.sessionToken, {
-                httpOnly: true,
-                secure: false,
-                signed: true,
-                maxAge: 3 * 60 * 60 * 1000,
-                sameSite: 'lax'
-            });
-            res.status(200).json({message: "Подтвердите почту!", success: result.success});
+            if (result.success) {
+                res.cookie("ss_id", result.sessionToken, {
+                    httpOnly: true,
+                    secure: false,
+                    signed: true,
+                    maxAge: 3 * 60 * 60 * 1000,
+                    sameSite: 'lax'
+                });
+                res.status(200).json({message: "Подтвердите почту!", success: result.success});
+            } else {
+                res.status(400).json({message: "Пользователь не найден!"})
+            }
         } catch (e) {
             next(e);
         }
@@ -82,9 +86,9 @@ export class AuthController {
         try {
             const refreshToken = req.signedCookies['refreshToken'];
             const tokens = await this.authService.refreshToken(refreshToken);
-
+            console.log("refresh")
             res.cookie('refreshToken', tokens.refreshToken, {
-                maxAge: 60 * 24 * 60 * 60 * 1000,
+                maxAge: 30 * 24 * 60 * 60 * 1000,
                 httpOnly: true,
                 secure: true,
                 signed: true

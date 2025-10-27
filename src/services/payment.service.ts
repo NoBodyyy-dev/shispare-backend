@@ -86,6 +86,19 @@ export class PaymentService {
         }
     }
 
+    refundPayment = async (paymentId: string) => {
+        try {
+            const data = await this.getPaymentDataById(paymentId);
+            const idempotencyKey = uuidv4();
+            return await this.YooKassa.createRefund({
+                payment_id: paymentId,
+                amount: data.amount
+            }, idempotencyKey)
+        } catch (e) {
+            throw APIError.InternalServerError()
+        }
+    }
+
     getPaymentUrl = async (paymentId: string): Promise<string | null> => {
         try {
             const payment = await this.getPaymentDataById(paymentId);

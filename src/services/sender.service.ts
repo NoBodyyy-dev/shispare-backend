@@ -4,7 +4,8 @@ import fs from 'fs';
 import handlebars from 'handlebars';
 import bot from "../bot";
 import config from '../config/sender.config';
-import {IOrder, Order} from "../models/Order.model";
+import {IFinallyCartItems, IOrder, Order} from "../models/Order.model";
+import {ICartProduct, IProduct, IProductVariant} from "../interfaces/product.interface";
 
 interface EmailOptions {
     to: string;
@@ -18,15 +19,13 @@ interface EmailOptions {
 }
 
 export class SenderService {
-    private static templatesDir = path.join(__dirname, 'templates');
-    private logger = console;
     private instance: Transporter;
 
     constructor() {
         this.instance = createTransport({
             host: config.EMAIL_SMTP_HOST,
             port: Number(config.EMAIL_SMTP_PORT),
-            secure: Number(config.EMAIL_SMTP_PORT) === 465, // true для SSL/465, false для TLS/587
+            secure: Number(config.EMAIL_SMTP_PORT) === 465,
             auth: {
                 user: config.EMAIL_FROM,
                 pass: config.EMAIL_PASSWORD,
@@ -39,13 +38,6 @@ export class SenderService {
         }).catch(err => {
             console.error("❌ Ошибка при соединении с SMTP:", err);
         });
-    }
-
-    private async getTemplate(templateName: string, context: object = {}): Promise<string> {
-        const templatePath = path.join(SenderService.templatesDir, `${templateName}.hbs`);
-        const templateContent = await fs.promises.readFile(templatePath, 'utf-8');
-        const template = handlebars.compile(templateContent);
-        return template(context);
     }
 
     public async sendEmail(options: EmailOptions): Promise<boolean> {
@@ -101,23 +93,22 @@ export class SenderService {
     }): Promise<{ message: string, ok: boolean }> {
         try {
             const order = await Order.findById(data.orderId)
-                .populate("items.product", "title price images") // только нужные поля
+                .populate("items.product", "title price images")
                 .lean<IOrder>();
 
-            if (!order) {
-                return { message: "Заказ не найден", ok: false };
-            }
+            if (!order) return {message: "Заказ не найден", ok: false};
 
             const itemsHtml = order.items.map((item: any) => {
+                const variant: IProductVariant = item.product.variants[item.product.variantIndex]
                 const img = item.product.images?.[0] || "";
                 return `
                 <div style="display:flex;align-items:center;margin-bottom:10px;">
                     <img src="${img}" alt="${item.product.title}" width="60" height="60" style="object-fit:cover;margin-right:10px;">
                     <div>
                         <div><b>${item.product.title}</b></div>
-                        <div>Цена: ${item.product.price} ₽</div>
+                        <div>Цена: ${variant.price} ₽</div>
                         <div>Количество: ${item.quantity}</div>
-                        <div>Сумма: ${item.product.price * item.quantity} ₽</div>
+                        <div>Сумма: ${variant.price * item.quantity} ₽</div>
                     </div>
                 </div>
             `;
@@ -163,13 +154,13 @@ export class SenderService {
                 : null;
 
             if ((isSendEmail && isSendBot) || (isSendEmail && !data.telegramId))
-                return { message: "Заказ создан", ok: true };
+                return {message: "Заказ создан", ok: true};
             else
-                return { message: "Что-то пошло не так", ok: false };
+                return {message: "Что-то пошло не так", ok: false};
 
         } catch (e) {
             console.error(e);
-            return { message: "Что-то пошло не так", ok: false };
+            return {message: "Что-то пошло не так", ok: false};
         }
     }
 }

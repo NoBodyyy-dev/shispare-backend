@@ -1,10 +1,23 @@
 import mongoose from "mongoose";
-import CategoryInterface from "../interfaces/category.interface";
+import {createSlug} from "../utils/utils";
 
-const categorySchema = new mongoose.Schema<CategoryInterface>({
+export interface ICategory {
+    _id: mongoose.Types.ObjectId;
+    title: string;
+    slug: string;
+}
+
+const categorySchema = new mongoose.Schema<ICategory>({
     title: {type: String, required: true, trim: true},
-    slug: {type: String, required: true, trim: true},
+    slug: {type: String, trim: true},
 })
 
-const Category = mongoose.model<CategoryInterface>("Category", categorySchema);
-export default Category;
+categorySchema.pre("save", function (next) {
+    if (!this.slug && this.title) {
+        this.slug = createSlug(this.title);
+    }
+    next();
+});
+
+
+export const Category = mongoose.model<ICategory>("Category", categorySchema);

@@ -46,15 +46,10 @@ export class UserService {
 
     async verifyCredentials(email: string, password: string) {
         const user = await User.findOne({email});
-        if (!user)
-            throw APIError.NotFound({message: 'Пользователь не найден'});
+        if (!user) throw APIError.NotFound({message: 'Пользователь не найден'});
 
-        console.log(password);
-        console.log(user.password);
         const isValid = bcrypt.compareSync(password, user.password);
-        if (!isValid) {
-            throw APIError.BadRequest({message: 'Неверный пароль'});
-        }
+        if (!isValid) throw APIError.BadRequest({message: 'Неверный пароль'});
 
         return this.mapUser(user);
     }
@@ -89,6 +84,6 @@ export class UserService {
     }
 
     async getAllUsers() {
-        return User.find().select("-password");
+        return User.find().select("-password").lean();
     }
 }

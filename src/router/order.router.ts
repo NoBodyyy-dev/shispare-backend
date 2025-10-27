@@ -5,7 +5,7 @@ import {OrderController} from "../controllers/order.controller";
 
 export const orderRouter = Router();
 
-orderRouter.get("/get-user-orders", authMiddleware, OrderController.getUserOrders);
+orderRouter.get("/get-user-orders/:id", authMiddleware, OrderController.getUserOrders);
 orderRouter.post("/create", [authMiddleware], OrderController.createOrder);
 orderRouter.patch("/:orderId/status", [authMiddleware, validateOrderUpdate], OrderController.updateOrderStatus);
 

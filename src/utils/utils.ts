@@ -1,6 +1,8 @@
 import express from "express";
 import mongoose from "mongoose";
 import slugify from "slugify";
+// @ts-ignore
+import colorNameList from "color-name-list"
 
 type AsyncFunction = (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<any>;
 
@@ -15,4 +17,5 @@ export const createSlug =
         locale: "ru",
         lower: true,
         remove: /[*+~.()'"!:@]/g,
+        strict: true,
     });

@@ -5,7 +5,7 @@ import {authMiddleware} from "../middleware/auth.middleware";
 import {adminMiddleware} from "../middleware/admin.middleware";
 import {APIError} from "../services/error.service";
 import axios from "axios";
-import Category from "../models/Category.model";
+import {Category} from "../models/Category.model";
 
 export const categoryRouter = Router();
 

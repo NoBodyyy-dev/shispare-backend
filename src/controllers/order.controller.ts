@@ -1,14 +1,14 @@
 // controllers/order.controller.ts
-import { Request, Response, NextFunction } from "express";
+import {Request, Response, NextFunction} from "express";
 import {orderService} from "../app"
-import { OrderStatus } from "../models/Order.model";
+import {OrderStatus} from "../models/Order.model";
 import {APIError} from "../services/error.service";
 
 export class OrderController {
     static async getUserOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const orders = await orderService.getUserOrders(req.user!._id.toString());
-            res.json(orders);
+            const orders = await orderService.getUserOrders(req.params.id);
+            res.status(200).json({orders});
         } catch (err) {
             next(err);
         }
@@ -17,8 +17,8 @@ export class OrderController {
     static async createOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const {
-                deliveryInfo, 
-                deliveryType, 
+                deliveryInfo,
+                deliveryType,
                 paymentMethod,
             } = req.body;
 
@@ -27,14 +27,12 @@ export class OrderController {
             }
 
             const order = await orderService.createOrder(
-                req.user!, 
-                deliveryInfo, 
-                deliveryType, 
-                paymentMethod, 
+                req.user!,
+                deliveryInfo,
+                deliveryType,
+                paymentMethod,
             );
 
-            console.log(order);
-            
             res.status(201).json({
                 order,
                 success: true
@@ -46,8 +44,8 @@ export class OrderController {
 
     static async updateOrderStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { orderId } = req.params;
-            const { status } = req.body;
+            const {orderId} = req.params;
+            const {status} = req.body;
 
             if (!orderId || !status) {
                 res.status(400).json({
@@ -58,7 +56,7 @@ export class OrderController {
             }
 
             const order = await orderService.updateOrderStatus(orderId, status);
-            
+
             res.json({
                 success: true,
                 data: order

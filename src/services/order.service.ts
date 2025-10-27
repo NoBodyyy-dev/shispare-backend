@@ -1,32 +1,39 @@
 import mongoose from "mongoose";
 import {IPaymentMethodType} from "@a2seven/yoo-checkout";
-import {DeliveryType, IOrder, Order, OrderStatus, PaymentMethod} from "../models/Order.model";
+import {
+    DeliveryType,
+    IOrder,
+    Order,
+    OrderStatus,
+    PaymentMethod,
+} from "../models/Order.model";
 import {IUser, User} from "../models/User.model";
-import {Cart} from "../models/Cart.model";
+import {Cart, ICart} from "../models/Cart.model";
 import {SenderService} from "./sender.service";
 import {PaymentService} from "./payment.service";
+import {ProductService} from "./product.service";
 import {APIError} from "./error.service";
 import {SocketService} from "./socket.service";
 
 export class OrderService {
-    private senderService: SenderService;
-    private paymentService: PaymentService;
+    private senderService = new SenderService();
+    private paymentService = new PaymentService();
+    private productService = new ProductService();
     private socketService: SocketService;
 
     constructor(socketService: SocketService) {
-        this.senderService = new SenderService();
-        this.paymentService = new PaymentService();
         this.socketService = socketService;
     }
 
+    /**
+     * 🧾 Создание нового заказа
+     */
     async createOrder(
         user: IUser,
         deliveryInfo: IOrder["deliveryInfo"],
         deliveryType: DeliveryType,
-        paymentMethod: PaymentMethod,
+        paymentMethod: PaymentMethod
     ) {
-        const recipientPhone = deliveryInfo.phone;
-        const recipientName = deliveryInfo.recipientName;
         this.validateOrderData(deliveryType, deliveryInfo);
 
         const session = await mongoose.startSession();
@@ -35,18 +42,21 @@ export class OrderService {
         try {
             const cart = await Cart.findOne({owner: user._id});
             if (!cart) throw APIError.NotFound({message: "Корзина не найдена"});
-            if (!cart.products.length) throw APIError.BadRequest({message: "Корзина пуста"});
+
+            await cart.recalcCart();
+
+            if (!cart.items.length)
+                throw APIError.BadRequest({message: "Корзина пуста"});
 
             await this.validateStockAvailability(cart);
 
+            const orderItems = await this.buildOrderItems(cart);
+
             const order = new Order({
                 owner: user._id,
-                items: cart.products.map(p => ({
-                    product: p.product,
-                    quantity: p.quantity
-                })),
-                totalAmount: cart.totalAmount,
+                items: orderItems,
                 totalProducts: cart.totalProducts,
+                totalAmount: cart.totalAmount,
                 discountAmount: cart.discountAmount,
                 finalAmount: cart.finalAmount,
                 status: OrderStatus.PROCESSING,
@@ -58,32 +68,36 @@ export class OrderService {
                 documentUrl: "",
             });
 
-
-            if (paymentMethod !== PaymentMethod.CASH && paymentMethod !== PaymentMethod.INVOICE && paymentMethod !== PaymentMethod.PAYINSHOP) {
-                const yooKassaPaymentType = this.mapPaymentMethodToYooKassa(paymentMethod);
-
+            if (
+                ![PaymentMethod.CASH, PaymentMethod.INVOICE, PaymentMethod.PAYINSHOP].includes(paymentMethod)
+            ) {
+                const yooType = this.mapPaymentMethodToYooKassa(paymentMethod);
                 const payment = await this.paymentService.createPayment({
                     paymentData: {
-                        amount: cart.finalAmount.toString(),
-                        type: yooKassaPaymentType
+                        amount: cart.finalAmount.toFixed(2),
+                        type: yooType,
                     },
                     orderData: {
                         orderId: order._id.toString(),
-                        description: `Заказ №${order.orderNumber}`
-                    }
+                        description: `Заказ №${order.orderNumber}`,
+                    },
                 });
 
                 order.paymentId = payment.id;
             }
 
-            await order.save();
+            await order.save({session});
 
-            cart.products = [];
-            cart.totalAmount = 0;
-            cart.totalProducts = 0;
-            cart.discountAmount = 0;
-            cart.finalAmount = 0;
-            await cart.save();
+            for (const item of cart.items) {
+                await this.productService.decreaseStock(
+                    item.product.toString(),
+                    item.article,
+                    item.quantity
+                );
+                await this.productService.incrementPurchaseCount(item.product.toString(), item.quantity);
+            }
+
+            await cart.clearCart();
 
             await session.commitTransaction();
             await session.endSession();
@@ -101,25 +115,67 @@ export class OrderService {
                     to: user.email,
                     orderId: order._id.toString(),
                     orderNumber: order.orderNumber,
-                    telegramId: user.telegramId
+                    telegramId: user.telegramId,
                 });
-            }, 1000);
+            }, 500);
 
             return {
                 order,
-                paymentUrl: order.paymentId ? (await this.paymentService.getPaymentUrl(order.paymentId)) : null
+                paymentUrl: order.paymentId
+                    ? await this.paymentService.getPaymentUrl(order.paymentId)
+                    : null,
             };
-        } catch (error) {
+        } catch (err) {
             await session.abortTransaction();
             await session.endSession();
-            throw error;
+            throw err;
         }
     }
 
-    private validateOrderData(
-        deliveryType: DeliveryType,
-        deliveryInfo: IOrder["deliveryInfo"],
-    ) {
+    private async validateStockAvailability(cart: ICart) {
+        for (const item of cart.items) {
+            const isAvailable = await this.productService.checkStock(
+                item.product.toString(),
+                item.article,
+                item.quantity
+            );
+
+            if (!isAvailable) {
+                throw APIError.BadRequest({
+                    message: `Недостаточно товара (артикул ${item.article}) на складе.`,
+                });
+            }
+        }
+    }
+
+    private async buildOrderItems(cart: ICart) {
+        const productIds = cart.items.map(i => i.product.toString());
+        const products = await this.productService.checkProducts(productIds);
+
+        return cart.items.map(item => {
+            const product = products.find(p => p._id!.toString() === item.product.toString());
+            if (!product) throw APIError.BadRequest({message: "Товар не найден"});
+
+            const variant = product.variants.find(v => v.article === item.article);
+            if (!variant)
+                throw APIError.BadRequest({
+                    message: `Вариант товара не найден (${product.title})`,
+                });
+
+            return {
+                product: product._id,
+                article: variant.article,
+                title: product.title,
+                color: variant.color,
+                package: variant.package,
+                price: variant.price,
+                discount: variant.discount,
+                quantity: item.quantity,
+            };
+        });
+    }
+
+    private validateOrderData(deliveryType: DeliveryType, deliveryInfo: IOrder["deliveryInfo"]) {
         if (!deliveryInfo.phone || !/^\+?[0-9\s\-\(\)]{10,}$/.test(deliveryInfo.phone)) {
             throw APIError.BadRequest({message: "Некорректный номер телефона получателя"});
         }
@@ -129,42 +185,19 @@ export class OrderService {
                 throw APIError.BadRequest({message: "Для доставки обязательны город и адрес"});
             }
         }
-
-        if (deliveryType === DeliveryType.PICKUP) {
-            if (!deliveryInfo.phone) {
-                throw APIError.BadRequest({message: "Для самовывоза обязателен номер телефона"});
-            }
-        }
     }
 
-    private async validateStockAvailability(cart: any) {
-        for (const item of cart.products) {
-            const product = await mongoose.model('Product').findById(item.product);
-            if (!product) {
-                throw APIError.BadRequest({message: `Товар ${item.product} не найден`});
-            }
-
-            const variant = product.variants[product.variantIndex];
-            if (!variant) {
-                throw APIError.BadRequest({message: `Вариант товара ${product.title} не найден`});
-            }
-
-            if (variant.countInStock < item.quantity) {
-                throw APIError.BadRequest({
-                    message: `Недостаточно товара ${product.title} на складе. Доступно: ${variant.countInStock}, запрошено: ${item.quantity}`
-                });
-            }
-        }
-    }
-
+    /**
+     * 💳 Маппинг метода оплаты под YooKassa
+     */
     private mapPaymentMethodToYooKassa(paymentMethod: PaymentMethod): IPaymentMethodType {
         switch (paymentMethod) {
             case PaymentMethod.CARD:
-                return 'bank_card';
+                return "bank_card";
             case PaymentMethod.SBP:
-                return 'sbp';
+                return "sbp";
             default:
-                return 'bank_card'; // По умолчанию карта
+                return "bank_card";
         }
     }
 
@@ -173,12 +206,11 @@ export class OrderService {
         if (!order) throw APIError.NotFound({message: "Заказ не найден"});
 
         if (newStatus === OrderStatus.CANCELLED && order.paymentId) {
-            await this.paymentService.cancelPayment(order.paymentId);
+            await this.paymentService.refundPayment(order.paymentId);
             order.cancelledAt = new Date();
         }
 
         if (newStatus === OrderStatus.DELIVERED && order.paymentId && !order.paymentStatus) {
-            await this.paymentService.capturePayment(order.paymentId);
             order.paymentStatus = true;
             order.deliveredAt = new Date();
         }
@@ -190,8 +222,8 @@ export class OrderService {
         if (user) {
             await this.senderService.sendEmail({
                 to: user.email,
-                subject: `Статус вашего заказа №${order.orderNumber} изменён`,
-                html: `<p>Новый статус заказа: <b>${newStatus}</b></p>`
+                subject: `Статус заказа №${order.orderNumber} изменён`,
+                html: `<p>Новый статус заказа: <b>${newStatus}</b></p>`,
             });
         }
 
@@ -200,15 +232,20 @@ export class OrderService {
             status: newStatus,
         });
 
-        return order;
-    }
-
-    async getAllOrders() {
-        return Order.find().populate("owner").populate("items.product");
+        return order.populate("owner items.product");
     }
 
     async getUserOrders(userId: string) {
-        return Order.findOne({owner: userId}).populate("owner").populate("items.product");
+        return Order.find({owner: userId})
+            .populate("owner")
+            .populate("items.product")
+            .lean();
     }
 
+    async getAllOrders() {
+        return Order.find()
+            .populate("owner")
+            .populate("items.product")
+            .lean();
+    }
 }

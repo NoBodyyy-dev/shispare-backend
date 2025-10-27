@@ -1,12 +1,9 @@
 import {Server, Socket} from 'socket.io';
-import jwt from 'jsonwebtoken';
 import {User} from '../models/User.model';
-import cfg from '../config/config';
 import {socketAuthMiddleware} from "../middleware/auth.middleware";
 import {orderService} from "../app";
 import {OrderStatus} from "../models/Order.model";
 import {ChatService} from "./chat.service";
-import {Message} from "../models/Message.model";
 
 export class SocketService {
     private io: Server;
@@ -29,27 +26,23 @@ export class SocketService {
         this.io.on("connection", (socket) => {
             console.log(`Socket connected: ${socket.id}`);
 
-            // 📌 Получить все заказы (для админа)
             socket.on("admin:getOrders", async (callback) => {
                 try {
-                    const orders = await orderService.getAllOrders(); // метод можешь добавить
+                    const orders = await orderService.getAllOrders();
+                    console.log(orders);
                     callback({success: true, orders});
                 } catch (err) {
                     callback({success: false, message: "Ошибка получения заказов"});
                 }
             });
 
-            // 📌 Обновить статус заказа (админ)
             socket.on("admin:updateOrderStatus", async ({orderId, status}: {
                 orderId: string,
                 status: OrderStatus
             }, callback) => {
                 try {
                     const order = await orderService.updateOrderStatus(orderId, status);
-
-                    // ⚡ Уведомляем всех админов о том, что заказ обновлён
                     this.sendToAdmins("admin:orderUpdated", order);
-
                     callback({success: true, order});
                 } catch (err: any) {
                     callback({success: false, message: err.message});
@@ -89,7 +82,6 @@ export class SocketService {
                 }
             });
 
-            // Удалить сообщение
             socket.on("chat:deleteMessage", async ({messageId, deleterId}, callback) => {
                 try {
                     await this.chatService.deleteMessage(messageId, deleterId);
@@ -108,13 +100,11 @@ export class SocketService {
     }
 
     private setupUserRooms(socket: Socket, userId: string) {
-        // Обязательные комнаты для всех
         const baseRooms = [
             `user-${userId}`,
             'notifications'
         ];
 
-        // Специальные комнаты по ролям
         const roleRooms = [];
         if (socket.user?.role === 'Admin') {
             roleRooms.push('admin-room', 'order-updates', 'system-alerts');
@@ -125,7 +115,6 @@ export class SocketService {
     }
 
     private setupEventHandlers(socket: Socket, userId: string) {
-        // Динамическая подписка на комнаты
         socket.on('subscribe', (room: string, callback) => {
             if (socket.rooms.size >= this.MAX_ROOMS_PER_USER) {
                 return callback?.({
@@ -191,22 +180,6 @@ export class SocketService {
         });
     }
 
-    public joinRoom(userId: string, room: string): boolean {
-        const socketId = this.onlineUsers.get(userId);
-        if (!socketId) return false;
-
-        this.io.sockets.sockets.get(socketId)?.join(room);
-        return true;
-    }
-
-    public leaveRoom(userId: string, room: string): boolean {
-        const socketId = this.onlineUsers.get(userId);
-        if (!socketId) return false;
-
-        this.io.sockets.sockets.get(socketId)?.leave(room);
-        return true;
-    }
-
     public sendToUser(userId: string, event: string, data: any): boolean {
         const socketId = this.onlineUsers.get(userId);
         if (!socketId) return false;
@@ -248,10 +221,6 @@ export class SocketService {
 
     public getOnlineUsers(): string[] {
         return Array.from(this.onlineUsers.keys());
-    }
-
-    public isUserOnline(userId: string): boolean {
-        return this.onlineUsers.has(userId);
     }
 
     public disconnectUser(userId: string): boolean {

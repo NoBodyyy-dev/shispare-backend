@@ -14,5 +14,3 @@ authRouter.post("/verify", [
 authRouter.post("/logout", authController.logoutFunc)
 
 authRouter.get("/refresh", authController.refreshFunc);
-
-

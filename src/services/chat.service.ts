@@ -13,7 +13,8 @@ export class ChatService {
             .populate({
                 path: "replyTo",
                 populate: {path: "senderId"}
-            });
+            })
+            .lean();
     }
 
     async sendMessage(senderId: string, content?: string, attachments?: any[], replyTo?: string) {
@@ -28,7 +29,8 @@ export class ChatService {
         const populatedMessage = await Message.findById(message._id)
             .populate('senderId')
             .populate('replyTo')
-            .populate('replyTo.senderId');
+            .populate('replyTo.senderId')
+            .lean();
 
         this.socketService.sendToAdmins('chat:newMessage', populatedMessage);
 

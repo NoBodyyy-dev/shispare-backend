@@ -1,6 +1,6 @@
 import {Request, Response, NextFunction} from "express";
 import {createSlug} from "../utils/utils";
-import Category from "../models/Category.model";
+import {Category} from "../models/Category.model";
 import {APIError} from "../services/error.service";
 import {Product} from "../models/Product.model";
 

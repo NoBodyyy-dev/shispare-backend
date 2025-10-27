@@ -1,4 +1,4 @@
-import Category from "../models/Category.model";
+import {Category} from "../models/Category.model";
 import {createSlug} from "../utils/utils";
 
 export class CategoryService {

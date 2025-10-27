@@ -22,8 +22,8 @@ export enum PaymentMethod {
     CARD = "card",                 // Оплата картой
     CASH = "cash",                 // Наличные при получении
     SBP = "sbp",                   // Система быстрых платежей
-    INVOICE = "invoice",            // По счету для юр. лиц
-    PAYINSHOP = "pay_in_shop"
+    INVOICE = "invoice",           // По счету для юр. лиц
+    PAYINSHOP = "pay_in_shop"      // Оплата в магазине
 }
 
 // Интерфейс для данных доставки
@@ -44,26 +44,27 @@ export interface IFinallyCartItems {
 // Основной интерфейс заказа
 export interface IOrder extends Document {
     _id: Types.ObjectId;
-    orderNumber: string;           // Уникальный номер заказа (генерируется)
-    owner: Types.ObjectId;         // Пользователь, оформивший заказ
+    orderNumber: string;                // Уникальный номер заказа (генерируется)
+    owner: Types.ObjectId;              // Пользователь, оформивший заказ
     items: IFinallyCartItems[];         // Состав заказа
-    totalAmount: number;           // Общая сумма
-    totalProducts: number;         // Общее количество товаров
-    discountAmount: number;        // Сумма скидки
-    finalAmount: number;           // Итоговая сумма к оплате
-    status: OrderStatus;           // Статус заказа
-    deliveryType: DeliveryType;    // Способ доставки
-    deliveryInfo: IDeliveryInfo;   // Данные доставки
+    totalAmount: number;                // Общая сумма
+    totalProducts: number;              // Общее количество товаров
+    discountAmount: number;             // Сумма скидки
+    finalAmount: number;                // Итоговая сумма к оплате
+    status: OrderStatus;                // Статус заказа
+    deliveryType: DeliveryType;         // Способ доставки
+    deliveryInfo: IDeliveryInfo;        // Данные доставки
     paymentMethod: IPaymentMethodType;  // Способ оплаты
-    paymentStatus: boolean;        // Статус оплаты
-    paymentId: string;
-    invoiceUrl?: string;           // Ссылка на счет/накладную
-    trackingNumber?: string;       // Трек-номер для отслеживания
-    createdAt: Date;               // Дата создания
-    updatedAt: Date;               // Дата обновления
-    cancelledAt?: Date;            // Дата отмены
-    deliveredAt?: Date;            // Дата доставки
-    documentUrl: string;
+    paymentStatus?: boolean;            // Статус оплаты
+    paymentId?: string;                 // Айди платежа
+    invoiceUrl?: string;                // Ссылка на счет/накладную
+    trackingNumber?: string;            // Трек-номер для отслеживания
+    createdAt: Date;                    // Дата создания
+    updatedAt: Date;                    // Дата обновления
+    cancelledAt?: Date;                 // Дата отмены
+    canceledCaused?: string;            // Причина отмены
+    deliveredAt?: Date;                 // Дата доставки
+    documentUrl?: string;
 }
 
 const OrderSchema = new Schema<IOrder>({
@@ -81,7 +82,7 @@ const OrderSchema = new Schema<IOrder>({
     totalAmount: {type: Number, required: true, min: 0},
     totalProducts: {type: Number, required: true, min: 0},
     discountAmount: {type: Number, default: 0, min: 0},
-    paymentId: {type: String, required: true},
+    paymentId: {type: String},
     finalAmount: {type: Number, required: true, min: 0},
     status: {type: String, enum: Object.values(OrderStatus), default: OrderStatus.PENDING},
     deliveryType: {type: String, enum: Object.values(DeliveryType), required: true},
@@ -93,7 +94,7 @@ const OrderSchema = new Schema<IOrder>({
         phone: {type: String, required: true},
         comment: String
     },
-    paymentMethod: {type: String, enum: Object.values(PaymentMethod), required: true},
+    paymentMethod: {type: String, enum: Object.values(PaymentMethod)},
     paymentStatus: {type: Boolean, default: false},
     invoiceUrl: {type: String},
     trackingNumber: {type: String},

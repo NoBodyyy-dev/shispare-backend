@@ -127,10 +127,8 @@ export class AuthService {
 
     async refreshToken(refreshToken: string) {
         const tokenData = await this.tokenService.validateToken(refreshToken, "R");
-        if (!tokenData) {
-        }
+        if (!tokenData) throw APIError.Unauthorized();
         const user = await this.userService.getUserById(tokenData!.id!);
-
         const tokens = this.tokenService.generateTokens({
             id: user.id,
             email: user.email,
@@ -138,7 +136,7 @@ export class AuthService {
         }, true);
 
         await this.tokenService.saveToken(user.id, tokens.refreshToken!);
-
+        console.log("end")
         return tokens;
     }
 

@@ -5,7 +5,9 @@ import {UserController} from "../controllers/user.controller";
 const userController = new UserController();
 export const userRouter = express.Router()
 
-userRouter.get("/me", authMiddleware, userController.getMeFunc);
-userRouter.get("/get-user/all", authMiddleware, userController.getAllUsersFunc);
-userRouter.get("/get-user/:id", authMiddleware, userController.getOneUser);
-userRouter.put("/update", authMiddleware, userController.updateMeFunc);
+userRouter.use(authMiddleware);
+
+userRouter.get("/me", userController.getMeFunc);
+userRouter.get("/get-user/all", userController.getAllUsersFunc);
+userRouter.get("/get-user/:id", userController.getOneUser);
+userRouter.put("/update", userController.updateMeFunc);

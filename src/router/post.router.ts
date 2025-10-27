@@ -8,6 +8,7 @@ const postRouter = Router();
 
 postRouter.get("/get-all", postController.getAll);
 postRouter.get("/get-post/:_id", postController.getPost)
+postRouter.get("/get-products-with-discount", postController.getPost)
 
 postRouter.use([authMiddleware, adminMiddleware]);
 
