@@ -48,8 +48,16 @@ export class ChatService {
         message.updatedAt = new Date();
 
         await message.save();
-        this.socketService.sendToAdmins('chat:editMessage', message);
-        return message;
+        
+        const populatedMessage = await Message.findById(message._id)
+            .populate('senderId')
+            .populate('replyTo')
+            .populate('replyTo.senderId')
+            .lean();
+            
+        // Отправляем обновленное сообщение всем пользователям чата
+        this.socketService.sendToRoom('notifications', 'chat:editMessage', populatedMessage);
+        return populatedMessage;
     }
 
     async deleteMessage(messageId: string, deleterId: string) {

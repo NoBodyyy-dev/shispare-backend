@@ -4,7 +4,7 @@ import {authMiddleware} from "../middleware/auth.middleware"
 import {adminMiddleware} from "../middleware/admin.middleware";
 
 const postController = new PostController();
-const postRouter = Router();
+export const postRouter = Router();
 
 postRouter.get("/get-all", postController.getAll);
 postRouter.get("/get-post/:_id", postController.getPost)

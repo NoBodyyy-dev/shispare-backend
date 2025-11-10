@@ -22,7 +22,17 @@ export class CartService {
     async getUserCart(owner: string) {
         const cart = await this.initialCart(owner);
         await cart.recalcCart();
-        return cart;
+        const populatedCart = await Cart.findById(cart._id)
+            .populate({
+                path: 'items.product',
+                model: 'Product',
+                populate: {
+                    path: 'category',
+                    model: 'Category'
+                }
+            })
+            .lean();
+        return populatedCart || cart;
     }
 
     /**
@@ -54,8 +64,19 @@ export class CartService {
 
         const cart = await this.initialCart(owner);
         await cart.addItem(toObjID(productId), article, quantity);
-
-        return await cart.recalcCart();
+        await cart.recalcCart();
+        
+        const populatedCart = await Cart.findById(cart._id)
+            .populate({
+                path: 'items.product',
+                model: 'Product',
+                populate: {
+                    path: 'category',
+                    model: 'Category'
+                }
+            })
+            .lean();
+        return populatedCart || cart;
     }
 
     /**
@@ -87,7 +108,19 @@ export class CartService {
 
         const cart = await this.initialCart(owner);
         await cart.updateQuantity(toObjID(productId), article, quantity);
-        return await cart.recalcCart();
+        await cart.recalcCart();
+        
+        const populatedCart = await Cart.findById(cart._id)
+            .populate({
+                path: 'items.product',
+                model: 'Product',
+                populate: {
+                    path: 'category',
+                    model: 'Category'
+                }
+            })
+            .lean();
+        return populatedCart || cart;
     }
 
     /**
@@ -106,7 +139,19 @@ export class CartService {
         if (!cart) throw APIError.NotFound({ message: "Корзина не найдена" });
 
         await cart.removeItem(toObjID(productId), article);
-        return await cart.recalcCart();
+        await cart.recalcCart();
+        
+        const populatedCart = await Cart.findById(cart._id)
+            .populate({
+                path: 'items.product',
+                model: 'Product',
+                populate: {
+                    path: 'category',
+                    model: 'Category'
+                }
+            })
+            .lean();
+        return populatedCart || cart;
     }
 
     /**
@@ -116,5 +161,39 @@ export class CartService {
         const cart = await this.initialCart(owner);
         await cart.clearCart();
         return cart;
+    }
+
+    /**
+     * Синхронизация корзины из localStorage
+     */
+    async syncCartFromLocalStorage(owner: string, items: Array<{ productId: string; article: number; quantity: number }>) {
+        const cart = await this.initialCart(owner);
+        
+        // Очищаем текущую корзину
+        await cart.clearCart();
+        
+        // Добавляем товары из localStorage
+        for (const item of items) {
+            try {
+                await cart.addItem(toObjID(item.productId), item.article, item.quantity);
+            } catch (error) {
+                // Пропускаем товары, которых нет в наличии или не найдены
+                console.error(`Не удалось добавить товар ${item.productId}:${item.article}`, error);
+            }
+        }
+        
+        await cart.recalcCart();
+        
+        const populatedCart = await Cart.findById(cart._id)
+            .populate({
+                path: 'items.product',
+                model: 'Product',
+                populate: {
+                    path: 'category',
+                    model: 'Category'
+                }
+            })
+            .lean();
+        return populatedCart || cart;
     }
 }

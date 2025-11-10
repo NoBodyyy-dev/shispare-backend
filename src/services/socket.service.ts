@@ -1,5 +1,6 @@
 import {Server, Socket} from 'socket.io';
 import {User} from '../models/User.model';
+import {Message} from '../models/Message.model';
 import {socketAuthMiddleware} from "../middleware/auth.middleware";
 import {orderService} from "../app";
 import {OrderStatus} from "../models/Order.model";
@@ -8,7 +9,7 @@ import {ChatService} from "./chat.service";
 export class SocketService {
     private io: Server;
     private onlineUsers = new Map<string, string>();
-    private onlineAdmins = new Set<string>();
+    private onlineAdmins = new Map<string, { _id: string; fullName: string }>();
     private readonly MAX_ROOMS_PER_USER = 10;
     private chatService: ChatService; // ✅ сервис чата
 
@@ -38,9 +39,15 @@ export class SocketService {
 
                     // if admin, notify with current online admins
                     if (socket.user?.role === 'Admin') {
-                        this.onlineAdmins.add(userId);
+                        this.onlineAdmins.set(userId, {
+                            _id: userId,
+                            fullName: socket.user.fullName || 'Admin'
+                        });
                         // broadcast current online admins to all admins
-                        this.sendToRoom('admin-room', 'admin:online', {onlineAdmins: Array.from(this.onlineAdmins), yourId: userId});
+                        this.sendToRoom('admin-room', 'admin:online', {
+                            onlineAdmins: Array.from(this.onlineAdmins.values()),
+                            yourId: userId
+                        });
                     }
 
                     callback({success: true});
@@ -113,18 +120,23 @@ export class SocketService {
             });
 
             // Редактировать сообщение
-            socket.on("chat:editMessage", async ({messageId, editorId, newContent, newAttachments}, callback) => {
+            socket.on("chat:editMessage", async ({messageId, newContent, newAttachments}, callback) => {
                 try {
+                    const editorId = socket.user!._id.toString();
                     const updated = await this.chatService.editMessage(messageId, editorId, newContent, newAttachments);
+                    this.io.emit("chat:editMessage", updated);
                     callback({success: true, message: updated});
                 } catch (err: any) {
                     callback({success: false, message: err.message});
                 }
             });
 
-            socket.on("chat:deleteMessage", async ({messageId, deleterId}, callback) => {
+            socket.on("chat:deleteMessage", async ({messageId}, callback) => {
                 try {
+                    const deleterId = socket.user!._id.toString();
                     await this.chatService.deleteMessage(messageId, deleterId);
+                    // Отправляем событие удаления всем пользователям
+                    this.io.emit("chat:deleteMessage", {messageId});
                     callback({success: true});
                 } catch (err: any) {
                     callback({success: false, message: err.message});
@@ -204,6 +216,16 @@ export class SocketService {
         socket.on('disconnect', async (reason) => {
             console.log(`User ${userId} disconnected: ${reason}`);
             this.onlineUsers.delete(userId);
+            
+            // Remove admin from online list if they disconnect
+            if (this.onlineAdmins.has(userId)) {
+                this.onlineAdmins.delete(userId);
+                // Notify other admins about the disconnection
+                this.sendToRoom('admin-room', 'admin:online', {
+                    onlineAdmins: Array.from(this.onlineAdmins.values()),
+                    yourId: userId
+                });
+            }
 
             await User.updateOne(
                 {_id: userId},

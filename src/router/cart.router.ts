@@ -12,3 +12,4 @@ cartRouter.post("/add", cartController.addToCart);
 cartRouter.put("/update", cartController.updateQuantity);
 cartRouter.delete("/remove", cartController.removeFromCart);
 cartRouter.delete("/clear", cartController.clearCart);
+cartRouter.post("/sync", cartController.syncCart);

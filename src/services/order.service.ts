@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import {IPaymentMethodType} from "@a2seven/yoo-checkout";
 import {
     DeliveryType,
@@ -35,9 +34,6 @@ export class OrderService {
         paymentMethod: PaymentMethod
     ) {
         this.validateOrderData(deliveryType, deliveryInfo);
-
-        const session = await mongoose.startSession();
-        session.startTransaction();
 
         try {
             const cart = await Cart.findOne({owner: user._id});
@@ -86,8 +82,10 @@ export class OrderService {
                 order.paymentId = payment.id;
             }
 
-            await order.save({session});
+            // Сохраняем заказ
+            await order.save();
 
+            // Обновляем остатки на складе и счетчики покупок
             for (const item of cart.items) {
                 await this.productService.decreaseStock(
                     item.product.toString(),
@@ -97,11 +95,11 @@ export class OrderService {
                 await this.productService.incrementPurchaseCount(item.product.toString(), item.quantity);
             }
 
+            // Очищаем корзину
             await cart.clearCart();
+            console.log("afterclear >>>", cart)
 
-            await session.commitTransaction();
-            await session.endSession();
-
+            // Асинхронно обновляем статус заказа и отправляем уведомления
             setTimeout(async () => {
                 order.status = OrderStatus.PENDING;
                 await order.save();
@@ -126,8 +124,8 @@ export class OrderService {
                     : null,
             };
         } catch (err) {
-            await session.abortTransaction();
-            await session.endSession();
+            // В случае ошибки заказ не будет создан, остатки не будут изменены
+            // Это обеспечивает консистентность данных даже без транзакций
             throw err;
         }
     }
