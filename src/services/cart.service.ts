@@ -85,9 +85,7 @@ export class CartService {
         if (variant.countInStock < quantity)
             throw APIError.BadRequest({ message: "Недостаточно товара на складе" });
 
-        const cart = await Cart.findOne({ owner });
-        if (!cart) throw APIError.NotFound({ message: "Корзина не найдена" });
-
+        const cart = await this.initialCart(owner);
         await cart.updateQuantity(toObjID(productId), article, quantity);
         return await cart.recalcCart();
     }

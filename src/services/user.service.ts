@@ -12,7 +12,8 @@ export class UserService {
         email: string;
         password: string;
     }) {
-        const hashedPassword = bcrypt.hashSync(data.password, 10);
+        // use async bcrypt hashing to avoid blocking the event loop
+        const hashedPassword = await bcrypt.hash(data.password, 12);
         const user = await User.create({
             fullName: data.fullName,
             email: data.email,
@@ -30,7 +31,8 @@ export class UserService {
         legalId: string;
         companyInfo: any;
     }) {
-        const hashedPassword = bcrypt.hashSync(data.password, 10);
+        // use async bcrypt hashing to avoid blocking the event loop
+        const hashedPassword = await bcrypt.hash(data.password, 12);
         const user = await User.create({
             email: data.email,
             password: hashedPassword,
@@ -48,7 +50,8 @@ export class UserService {
         const user = await User.findOne({email});
         if (!user) throw APIError.NotFound({message: 'Пользователь не найден'});
 
-        const isValid = bcrypt.compareSync(password, user.password);
+        // use async compare to avoid blocking
+        const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) throw APIError.BadRequest({message: 'Неверный пароль'});
 
         return this.mapUser(user);

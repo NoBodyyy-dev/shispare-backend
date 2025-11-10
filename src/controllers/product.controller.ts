@@ -35,7 +35,8 @@ export class ProductController {
 
     getProduct = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const product = await this.productService.getProduct(req.params.slug);
+            console.log(req.params);
+            const product = await this.productService.getProduct(Number(req.params.article));
             res.status(200).json({ success: true, product });
         } catch (e) {
             next(e);

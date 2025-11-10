@@ -11,7 +11,23 @@ export class ProductService {
         return Product.find({_id: {$in: productIds}}).lean();
     }
 
-    async createProduct(data: any): Promise<IProduct> {
+    async createProduct(data: {
+        title: string;
+        description?: string;
+        categorySlug: string;
+        country?: string;
+        images?: string[];
+        variants?: IVariant[];
+        shelfLife?: string;
+        characteristics?: string[];
+        documents?: string[];
+        article?: number;
+        price?: number;
+        color?: { ru: string; hex: string };
+        package?: { type: string; count: number; unit: string };
+        discount?: number;
+        countInStock?: number;
+    }): Promise<IProduct> {
         const category = await Category.findOne({slug: data.categorySlug});
         if (!category) throw APIError.NotFound({message: "Категория не найдена"});
 
@@ -21,10 +37,10 @@ export class ProductService {
             ? data.variants
             : [
                 {
-                    article: data.article,
-                    price: data.price,
-                    color: data.color,
-                    package: data.package,
+                    article: data.article!,
+                    price: data.price!,
+                    color: data.color!,
+                    package: data.package!,
                     discount: data.discount || 0,
                     countInStock: data.countInStock || 0,
                 },
@@ -38,7 +54,14 @@ export class ProductService {
             country: data.country,
             images: data.images || [],
             variants,
+            shelfLife: data.shelfLife || "",
+            characteristics: data.characteristics || [],
+            documents: data.documents || [],
             isActive: true,
+            displayedRating: 0,
+            totalComments: 0,
+            totalRatings: 0,
+            totalPurchases: 0,
         });
 
         await product.save();
@@ -56,14 +79,17 @@ export class ProductService {
         return {products};
     }
 
-    async getProduct(slug: string) {
-        const product = await Product.findOne({slug, isActive: true}).lean();
+    async getProduct(article: number) {
+        console.log(article);
+        const product = await Product.findOne({"variants.article": article, isActive: true}).lean();
+        console.log(product);
         if (!product) throw APIError.NotFound({message: "Товар не найден"});
         return product;
     }
 
     async getPopularProducts(limit = 12) {
         return Product.find({isActive: true})
+            .populate("category")
             .sort({totalPurchases: -1})
             .limit(limit)
             .lean();
@@ -74,6 +100,7 @@ export class ProductService {
             isActive: true,
             "variants.discount": {$gt: 0},
         })
+            .populate("category")
             .limit(limit)
             .lean();
     }
@@ -83,6 +110,7 @@ export class ProductService {
             displayedRating: {$gt: 0},
             isActive: true,
         })
+            .populate("category")
             .sort({displayedRating: -1})
             .limit(limit)
             .lean();
@@ -104,7 +132,7 @@ export class ProductService {
         )
             .sort({score: {$meta: "textScore"}})
             .limit(10)
-            .select("title slug images variants")
+            .select("title slug images variants characteristics")
             .lean();
 
         if (!results.length) {
@@ -114,12 +142,13 @@ export class ProductService {
                 $or: [
                     {title: regex},
                     {description: regex},
+                    {characteristics: regex},
                     {"variants.color.ru": regex},
                     {"variants.article": Number(query) || -1},
                 ],
             })
                 .limit(10)
-                .select("title slug images variants")
+                .select("title slug images variants characteristics")
                 .lean();
         }
 
@@ -138,7 +167,7 @@ export class ProductService {
         const regex = new RegExp(query, "i");
         return Product.find({title: regex, isActive: true})
             .limit(5)
-            .select("title slug images")
+            .select("title slug images characteristics")
             .lean();
     }
 

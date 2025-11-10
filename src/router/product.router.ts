@@ -7,14 +7,14 @@ const router = express.Router();
 const controller = new ProductController();
 
 router.get("/category/:slug", controller.getProductsByCategory);
-router.get("/slug/:slug", controller.getProduct);
+router.get("/get-one/:article", controller.getProduct);
 router.get("/popular", controller.getPopularProducts);
 router.get("/discounts", controller.getProductsWithDiscount);
 router.get("/best-rating", controller.getProductsByBestRating);
 router.get("/search", controller.searchProducts);
 router.get("/search/articles/:article", controller.searchProductsByArticle);
 router.get("/search/suggestions", controller.getSearchSuggestions);
-router.get("/check", controller.checkProducts);
+router.post("/check", controller.checkProducts);
 
 router.post("/create", [authMiddleware, adminMiddleware], controller.createProduct);
 router.put("/update/:productID", [authMiddleware, adminMiddleware], controller.updateProduct);

@@ -32,7 +32,13 @@ export class AuthService {
         this.cartService = new CartService();
     }
 
-    async register(data: RegisterData) {
+    async resendCode(sessionToken: string) {
+        const result = await this.sessionService.resendCode(sessionToken);
+        await this.senderService.sendVerificationEmail({email: (result.session.user as any).email, code: result.code});
+        return {success: true};
+    }
+
+    async register(data: RegisterData, meta?: { deviceId?: string; ip?: string; userAgent?: string }) {
         this.validateRegistrationData(data);
 
         if (await this.userService.userExists(data.email))
@@ -52,7 +58,7 @@ export class AuthService {
                 userId: user.id,
                 token: sessionToken,
                 code
-            }),
+            }, meta),
             this.senderService.sendVerificationEmail({email: data.email, code: code}),
             this.cartService.initialCart(user.id)
         ])
@@ -89,7 +95,11 @@ export class AuthService {
         }
     }
 
-    async login(data: { email: string; password: string }) {
+    async login(data: { email: string; password: string }, meta?: {
+        deviceId?: string;
+        ip?: string;
+        userAgent?: string
+    }) {
         const user = await this.userService.verifyCredentials(data.email, data.password);
         if (!user) return {success: false}
         const sessionToken = this.tokenService.generateSessionToken({
@@ -103,14 +113,18 @@ export class AuthService {
             userId: user.id,
             token: sessionToken,
             code
-        });
+        }, meta);
 
         await this.senderService.sendVerificationEmail({email: user.email, code});
 
         return {sessionToken, success: true};
     }
 
-    async verifyCode(sessionToken: string, code: string) {
+    async verifyCode(sessionToken: string, code: string, meta?: {
+        deviceId?: string;
+        ip?: string;
+        userAgent?: string
+    }) {
         console.log(sessionToken);
         const session = await this.sessionService.verifyCode(sessionToken, code);
         const tokens = this.tokenService.generateTokens({
@@ -119,28 +133,47 @@ export class AuthService {
             role: session.user.role
         }, true);
 
-        await this.tokenService.saveToken(session.user._id.toString(), tokens.refreshToken!);
+        await this.tokenService.saveToken(session.user._id.toString(), tokens.refreshToken!, {
+            deviceId: meta?.deviceId,
+            ip: meta?.ip,
+            userAgent: meta?.userAgent
+        });
         await this.sessionService.deleteSession(session.id);
 
         return tokens;
     }
 
-    async refreshToken(refreshToken: string) {
+    async refreshToken(refreshToken: string, meta?: { deviceId?: string; ip?: string; userAgent?: string }) {
         const tokenData = await this.tokenService.validateToken(refreshToken, "R");
         if (!tokenData) throw APIError.Unauthorized();
+
         const user = await this.userService.getUserById(tokenData!.id!);
+
+        const stored = await this.tokenService.findTokenByUser(user.id, meta?.deviceId);
+        if (!stored) throw APIError.Unauthorized();
+        const isMatch = await this.tokenService.compareRefreshToken(refreshToken, stored.refreshToken);
+        if (!isMatch) throw APIError.Unauthorized();
+
         const tokens = this.tokenService.generateTokens({
             id: user.id,
             email: user.email,
             role: user.role
         }, true);
 
-        await this.tokenService.saveToken(user.id, tokens.refreshToken!);
-        console.log("end")
+        await this.tokenService.saveToken(user.id, tokens.refreshToken!, {
+            deviceId: meta?.deviceId,
+            ip: meta?.ip,
+            userAgent: meta?.userAgent
+        });
         return tokens;
     }
 
-    async logout(refreshToken: string) {
-        await this.tokenService.removeToken(refreshToken);
+    async logout(refreshToken: string, meta?: { deviceId?: string }) {
+        await this.tokenService.removeToken(refreshToken, meta?.deviceId);
+    }
+
+    async checkSession(ss_id: string) {
+        const session = await this.sessionService.getSessionByToken(ss_id);
+        return {success: Boolean(session?._id)}
     }
 }

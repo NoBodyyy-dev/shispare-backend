@@ -261,10 +261,11 @@ export class ParsingService {
             return file.buffer as Buffer;
         }
         if (typeof file === "object" && "path" in file && typeof (file as any).path === "string") {
-            return fs.readFileSync((file as any).path);
+            // use async file read to avoid blocking the event loop for large files
+            return await fs.promises.readFile((file as any).path);
         }
         if (typeof file === "string") {
-            return fs.readFileSync(file);
+            return await fs.promises.readFile(file);
         }
         if (file instanceof Buffer) {
             return file;

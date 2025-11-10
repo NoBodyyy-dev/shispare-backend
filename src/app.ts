@@ -5,6 +5,8 @@ import express from "express";
 import mongoose from "mongoose";
 import * as http from "node:http";
 import cors from "cors";
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import cookieParser from "cookie-parser";
 import config from "./config/config";
 import bot from "./bot"
@@ -19,7 +21,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: config.CLIENT_URL,
         methods: "*",
         credentials: true
     },
@@ -33,6 +35,12 @@ export const orderService = new OrderService(socketService);
 
 app.use(express.json());
 app.use(cookieParser(config.COOKIE_SECRET));
+// Security middlewares
+app.use(helmet());
+app.use(rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // limit each IP to 100 requests per windowMs
+}));
 app.use(cors({
     origin: config.CLIENT_URL,
     credentials: true,

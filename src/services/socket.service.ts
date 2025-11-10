@@ -8,6 +8,7 @@ import {ChatService} from "./chat.service";
 export class SocketService {
     private io: Server;
     private onlineUsers = new Map<string, string>();
+    private onlineAdmins = new Set<string>();
     private readonly MAX_ROOMS_PER_USER = 10;
     private chatService: ChatService; // ✅ сервис чата
 
@@ -25,8 +26,30 @@ export class SocketService {
     private initializeConnectionHandling() {
         this.io.on("connection", (socket) => {
             console.log(`Socket connected: ${socket.id}`);
+            // client will call join:user after connecting to initialize rooms and user state
+            socket.on('join:user', (callback: (res: { success: boolean; error?: string }) => void) => {
+                try {
+                    const userId = socket.user?._id?.toString();
+                    if (!userId) return callback({success: false, error: 'Unauthorized'});
+                    this.handleUserConnection(socket, userId).catch(err => console.error(err));
+                    this.setupUserRooms(socket, userId);
+                    this.setupEventHandlers(socket, userId);
+                    this.trackConnectionStatus(socket, userId);
 
-            socket.on("admin:getOrders", async (callback) => {
+                    // if admin, notify with current online admins
+                    if (socket.user?.role === 'Admin') {
+                        this.onlineAdmins.add(userId);
+                        // broadcast current online admins to all admins
+                        this.sendToRoom('admin-room', 'admin:online', {onlineAdmins: Array.from(this.onlineAdmins), yourId: userId});
+                    }
+
+                    callback({success: true});
+                } catch (err: any) {
+                    callback({success: false, error: err?.message});
+                }
+            });
+
+            socket.on('admin:getOrders', async (callback) => {
                 try {
                     const orders = await orderService.getAllOrders();
                     console.log(orders);
@@ -57,6 +80,23 @@ export class SocketService {
                     callback({success: false, message: e.message});
                 }
             })
+
+            // typing indicator from clients
+            socket.on('chat:typing', (data: { isTyping: boolean }) => {
+                const payload = {userId: socket.user?._id?.toString(), fullName: socket.user?.fullName, isTyping: data.isTyping};
+                socket.broadcast.emit('chat:typing', payload);
+            });
+
+            // mark messages as seen
+            socket.on('chat:markSeen', async ({messageId}: { messageId: string }) => {
+                try {
+                    await this.chatService.markAsRead([messageId], socket.user!._id.toString());
+                    // notify others that message was seen
+                    this.io.emit('chat:markSeen', {messageId, user: socket.user});
+                } catch (e) {
+                    console.error('markSeen error', e);
+                }
+            });
 
             socket.on("chat:sendMessage", async ({content, attachments, replyTo}: {
                 content: string,

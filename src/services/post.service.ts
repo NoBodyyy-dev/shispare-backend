@@ -4,7 +4,7 @@ import {createSlug} from "../utils/utils";
 
 interface PostData {
     title: string;
-    description: string;
+    content: string;
     image: string;
 }
 
@@ -25,8 +25,8 @@ export class PostService {
     public async updatePost(_id: string, data: PostData) {
         const post = await Post.findOne({_id});
         if (!post) throw APIError.NotFound({message: "Пост не найден"});
-        post.title = data.title;
-        post.description = data.description;
+    post.title = data.title;
+    post.content = data.content;
         post.image = data.image;
 
         await post.save();

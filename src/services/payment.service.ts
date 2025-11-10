@@ -1,7 +1,6 @@
 import {ICreatePayment, IPaymentMethodType, Payment, YooCheckout} from "@a2seven/yoo-checkout";
 import paycfg from "../config/payment.config"
 import {APIError} from "./error.service";
-import bcrypt from "bcrypt";
 import {v4 as uuidv4} from 'uuid';
 
 type PaymentData = {
@@ -43,7 +42,9 @@ export class PaymentService {
                 description: data.orderData.description,
                 capture: true
             }
-            return await this.YooKassa.createPayment(createPayment, bcrypt.hashSync(data.orderData.orderId + Date.now().toString(), 3));
+            // use a proper idempotency key (UUID) instead of a low-round bcrypt hash
+            const idempotencyKey = uuidv4();
+            return await this.YooKassa.createPayment(createPayment, idempotencyKey);
         } catch (e) {
             console.log(e);
             throw APIError.InternalServerError()
