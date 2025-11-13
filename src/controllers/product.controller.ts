@@ -7,7 +7,21 @@ export class ProductController {
 
     createProduct = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const product = await this.productService.createProduct(req.body);
+            const files = req.files as Express.Multer.File[];
+            const body = req.body;
+            
+            // Парсим JSON поля из FormData
+            const productData: any = {
+                ...body,
+                color: body.color ? JSON.parse(body.color) : undefined,
+                package: body.package ? JSON.parse(body.package) : undefined,
+                price: body.price ? Number(body.price) : undefined,
+                discount: body.discount ? Number(body.discount) : undefined,
+                countInStock: body.countInStock ? Number(body.countInStock) : undefined,
+                article: body.article ? Number(body.article) : undefined,
+            };
+            
+            const product = await this.productService.createProduct(productData, files);
             res.status(201).json({ success: true, product });
         } catch (e) {
             next(e);
@@ -27,7 +41,9 @@ export class ProductController {
     getProductsByCategory = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const products = await this.productService.getProductsByCategory(req.params.slug);
-            res.status(200).json({ success: true, products });
+            console.log("controller >>>", products);
+
+            res.status(200).json({ success: true, products: {...products } });
         } catch (e) {
             next(e);
         }
@@ -88,6 +104,10 @@ export class ProductController {
     searchProducts = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { q } = req.query;
+            if (!q || !String(q).trim()) {
+                res.status(200).json({ success: true, products: [] });
+                return;
+            }
             const products = await this.productService.searchProducts(String(q));
             res.status(200).json({ success: true, products });
         } catch (e) {
@@ -98,8 +118,13 @@ export class ProductController {
     searchProductsByArticle = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { article } = req.params;
-            const products = await this.productService.searchProductsByArticle(Number(article));
-            res.status(200).json({ success: true, products });
+            const articleNumber = Number(article);
+            if (!articleNumber || articleNumber <= 0) {
+                res.status(200).json({ success: true, product: null });
+                return
+            }
+            const product = await this.productService.searchProductsByArticle(articleNumber);
+            res.status(200).json({ success: true, product });
         } catch (e) {
             next(e);
         }
@@ -108,6 +133,10 @@ export class ProductController {
     getSearchSuggestions = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { q } = req.query;
+            if (!q || !String(q).trim()) {
+                res.status(200).json({ success: true, suggestions: [] });
+                return;
+            }
             const suggestions = await this.productService.getSearchSuggestions(String(q));
             res.status(200).json({ success: true, suggestions });
         } catch (e) {

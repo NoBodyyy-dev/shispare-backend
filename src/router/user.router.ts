@@ -15,3 +15,5 @@ userRouter.put("/update", userController.updateMeFunc);
 // Admin token management
 userRouter.get('/tokens/:id', adminMiddleware, userController.listUserTokens);
 userRouter.delete('/tokens/:id', adminMiddleware, userController.revokeUserTokens);
+// Admin: ban/unban user
+userRouter.put('/ban/:id', adminMiddleware, userController.banUser);

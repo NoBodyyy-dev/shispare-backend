@@ -2,8 +2,10 @@ import {IProduct, IVariant, Product} from "../models/Product.model";
 import {Category} from "../models/Category.model";
 import {createSlug} from "../utils/utils";
 import {APIError} from "./error.service";
+import {CloudService} from "./cloud.service";
 
 export class ProductService {
+    private cloudService = new CloudService();
     async checkProducts(productIds: string[]): Promise<IProduct[]> {
         if (!Array.isArray(productIds) || productIds.length === 0)
             throw APIError.BadRequest({message: "Передайте массив productIds"});
@@ -27,11 +29,20 @@ export class ProductService {
         package?: { type: string; count: number; unit: string };
         discount?: number;
         countInStock?: number;
-    }): Promise<IProduct> {
+    }, files?: Express.Multer.File[]): Promise<IProduct> {
         const category = await Category.findOne({slug: data.categorySlug});
         if (!category) throw APIError.NotFound({message: "Категория не найдена"});
 
         const slug = createSlug(`${data.title}-${data.country || ""}`);
+
+        let imageUrls: string[] = data.images || [];
+        if (files && files.length > 0) {
+            const uploadPromises = files.map(file => 
+                this.cloudService.uploadBuffer(file.buffer, {folder: "products"})
+            );
+            const uploadResults = await Promise.all(uploadPromises);
+            imageUrls = uploadResults.map(result => result.secure_url) as string[];
+        }
 
         const variants: IVariant[] = data.variants && data.variants.length
             ? data.variants
@@ -52,7 +63,7 @@ export class ProductService {
             slug,
             category: category._id,
             country: data.country,
-            images: data.images || [],
+            images: imageUrls,
             variants,
             shelfLife: data.shelfLife || "",
             characteristics: data.characteristics || [],
@@ -69,12 +80,15 @@ export class ProductService {
     }
 
     async getProductsByCategory(categorySlug: string) {
-        const category = await Category.findOne({slug: categorySlug}).select("_id");
+        console.log(categorySlug);
+        const category = await Category.findOne({slug: categorySlug});
+        console.log(">>>", category?._id);
         if (!category) throw APIError.NotFound({message: "Категория не найдена"});
 
         const products = await Product
-            .find({category: category._id, isActive: true})
+            .find({category: category._id.toString(), isActive: true})
             .lean();
+        console.log(">>>>> products >>>>>", products)
 
         return {products};
     }
@@ -124,51 +138,110 @@ export class ProductService {
     }
 
     async searchProducts(query: string) {
-        if (!query) return [];
+        if (!query || !query.trim()) return [];
 
-        let results = await Product.find(
-            {$text: {$search: query}, isActive: true},
-            {score: {$meta: "textScore"}}
-        )
-            .sort({score: {$meta: "textScore"}})
-            .limit(10)
-            .select("title slug images variants characteristics")
+        const searchQuery = query.trim();
+        const regex = new RegExp(searchQuery, "i");
+        const articleNumber = Number(searchQuery);
+        const isArticleSearch = !isNaN(articleNumber) && articleNumber > 0;
+
+        const searchConditions: any = {
+            isActive: true,
+            $or: [
+                {title: regex},
+                {description: regex},
+                {characteristics: {$in: [regex]}},
+                {"variants.color.ru": regex},
+            ],
+        };
+
+        // Если запрос - число, добавляем поиск по артикулу
+        if (isArticleSearch) {
+            searchConditions.$or.push({"variants.article": articleNumber});
+        }
+
+        const results = await Product.find(searchConditions)
+            .populate("category", "name slug")
+            .limit(50)
+            .select("title slug images variants characteristics category")
             .lean();
 
-        if (!results.length) {
-            const regex = new RegExp(query, "i");
-            results = await Product.find({
+        // Если поиск по артикулу и ничего не найдено, пробуем точный поиск
+        if (isArticleSearch && results.length === 0) {
+            const exactMatch = await Product.findOne({
+                "variants.article": articleNumber,
                 isActive: true,
-                $or: [
-                    {title: regex},
-                    {description: regex},
-                    {characteristics: regex},
-                    {"variants.color.ru": regex},
-                    {"variants.article": Number(query) || -1},
-                ],
             })
-                .limit(10)
-                .select("title slug images variants characteristics")
+                .populate("category", "name slug")
+                .select("title slug images variants characteristics category")
                 .lean();
+            
+            if (exactMatch) {
+                return [exactMatch];
+            }
         }
 
         return results;
     }
 
     async searchProductsByArticle(article: number) {
+        if (!article || article <= 0) {
+            return null;
+        }
+        
         return Product.findOne({
             "variants.article": article,
             isActive: true,
-        }).lean();
+        })
+            .populate("category", "name slug")
+            .lean();
     }
 
     async getSearchSuggestions(query: string) {
-        if (!query) return [];
-        const regex = new RegExp(query, "i");
-        return Product.find({title: regex, isActive: true})
+        if (!query || !query.trim()) return [];
+        
+        const searchQuery = query.trim();
+        const regex = new RegExp(searchQuery, "i");
+        const articleNumber = Number(searchQuery);
+        const isArticleSearch = !isNaN(articleNumber) && articleNumber > 0;
+
+        const searchConditions: any = {
+            isActive: true,
+            $or: [
+                {title: regex},
+                {description: regex},
+                {"variants.color.ru": regex},
+            ],
+        };
+
+        // Если запрос - число, добавляем поиск по артикулу
+        if (isArticleSearch) {
+            searchConditions.$or.push({"variants.article": articleNumber});
+        }
+
+        const products = await Product.find(searchConditions)
+            .populate("category", "name slug title")
             .limit(5)
-            .select("title slug images characteristics")
+            .select("title slug images variants characteristics category")
             .lean();
+
+        // Добавляем variantIndex для каждого продукта
+        return products.map((product: any) => {
+            let variantIndex = 0;
+            
+            // Если поиск по артикулу, находим индекс варианта с этим артикулом
+            if (isArticleSearch && product.variants) {
+                const foundIndex = product.variants.findIndex((v: any) => v.article === articleNumber);
+                if (foundIndex !== -1) {
+                    variantIndex = foundIndex;
+                }
+            }
+            
+            return {
+                ...product,
+                variantIndex,
+            };
+        });
     }
 
     async setDiscountOnCategoryProducts(categorySlug: string, discount: number) {

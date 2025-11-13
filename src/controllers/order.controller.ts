@@ -26,7 +26,7 @@ export class OrderController {
                 throw APIError.BadRequest({message: "Нет обязательных полей"});
             }
 
-            const order = await orderService.createOrder(
+            const result = await orderService.createOrder(
                 req.user!,
                 deliveryInfo,
                 deliveryType,
@@ -34,7 +34,8 @@ export class OrderController {
             );
 
             res.status(201).json({
-                order,
+                order: result.order,
+                paymentUrl: result.paymentUrl,
                 success: true
             });
         } catch (err) {
@@ -45,7 +46,7 @@ export class OrderController {
     static async updateOrderStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const {orderId} = req.params;
-            const {status} = req.body;
+            const {status, cancellationReason, deliveryDate} = req.body;
 
             if (!orderId || !status) {
                 res.status(400).json({
@@ -55,12 +56,34 @@ export class OrderController {
                 return;
             }
 
-            const order = await orderService.updateOrderStatus(orderId, status);
+            const order = await orderService.updateOrderStatus(orderId, status, cancellationReason, deliveryDate);
 
             res.json({
                 success: true,
                 data: order
             });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    static async getOrderByNumber(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const {orderNumber} = req.params;
+            const order = await orderService.getOrderByNumber(orderNumber);
+            res.status(200).json({order, success: true});
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    static async getOneOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const {orderNumber} = req.params;
+            // Преобразуем в число, если это возможно, иначе используем как строку
+            const orderNum = isNaN(Number(orderNumber)) ? orderNumber : Number(orderNumber);
+            const order = await orderService.getOrderByNumber(orderNum);
+            res.status(200).json({order, success: true});
         } catch (err) {
             next(err);
         }

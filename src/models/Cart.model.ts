@@ -141,9 +141,15 @@ cartSchema.methods.updateQuantity = async function (
             i.product.toString() === productId.toString() &&
             i.article === article
     );
-    if (idx < 0) throw new Error("Товар не найден в корзине");
-
-    this.items[idx].quantity = quantity;
+    
+    // Если товара нет в корзине, добавляем его с указанным количеством
+    if (idx < 0) {
+        this.items.push({product: productId, article, quantity});
+    } else {
+        // Если товар есть, обновляем количество
+        this.items[idx].quantity = quantity;
+    }
+    
     await this.recalcCart();
     await this.save();
 };
@@ -162,11 +168,20 @@ cartSchema.methods.removeItem = async function (
 };
 
 cartSchema.methods.clearCart = async function (): Promise<void> {
+    console.log("clear")
     this.items = [];
     this.totalProducts = 0;
     this.totalAmount = 0;
     this.discountAmount = 0;
     this.finalAmount = 0;
+    this.updatedAt = new Date();
+
+    this.markModified('items');
+    this.markModified('totalProducts');
+    this.markModified('totalAmount');
+    this.markModified('discountAmount');
+    this.markModified('finalAmount');
+
     await this.save();
 };
 

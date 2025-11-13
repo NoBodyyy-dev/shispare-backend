@@ -10,6 +10,10 @@ import {commentRouter} from "./comment.router";
 import {parserRouter} from "./parser.router";
 import {stockRouter} from "./stock.router";
 import {postRouter} from "./post.router";
+import {paymentRouter} from "./payment.router";
+import {requestRouter} from "./request.router";
+import {chatRouter} from "./chat.router";
+import {sitemapRouter} from "./sitemap.router";
 
 export const router: Router = Router();
 
@@ -24,4 +28,8 @@ router.use("/comment", commentRouter);
 router.use("/parse", parserRouter);
 router.use("/stock", stockRouter);
 router.use("/post", postRouter);
+router.use("/payment", paymentRouter);
+router.use("/request", requestRouter);
+router.use("/chat", chatRouter);
+router.use("/", sitemapRouter);
 

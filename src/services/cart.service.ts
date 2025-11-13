@@ -4,11 +4,9 @@ import { APIError } from "./error.service";
 import { toObjID } from "../utils/utils";
 
 export class CartService {
-    /**
-     * Инициализация корзины при первом обращении
-     */
     async initialCart(owner: string) {
         let cart = await Cart.findOne({ owner });
+        console.log("cart >>>", cart)
         if (!cart) {
             cart = new Cart({ owner, items: [] });
             await cart.save();
@@ -16,9 +14,6 @@ export class CartService {
         return cart;
     }
 
-    /**
-     * Получение корзины пользователя
-     */
     async getUserCart(owner: string) {
         const cart = await this.initialCart(owner);
         await cart.recalcCart();
@@ -79,9 +74,6 @@ export class CartService {
         return populatedCart || cart;
     }
 
-    /**
-     * Обновление количества по артикулу
-     */
     async updateQuantity({
                              owner,
                              productId,

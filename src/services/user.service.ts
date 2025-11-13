@@ -18,7 +18,6 @@ export class UserService {
             fullName: data.fullName,
             email: data.email,
             password: hashedPassword,
-            type: 'IND',
             personalKey: crypto.randomUUID(),
         });
         return this.mapUser(user);
@@ -30,18 +29,30 @@ export class UserService {
         legalType: 'ЮЛ' | 'ИП';
         legalId: string;
         companyInfo: any;
+        bankAccount?: {
+            accountNumber?: string;
+            bankName?: string;
+            bik?: string;
+            correspondentAccount?: string;
+        };
     }) {
         // use async bcrypt hashing to avoid blocking the event loop
         const hashedPassword = await bcrypt.hash(data.password, 12);
+        
+        // Преобразуем legalId в число
+        const legalIdNumber = parseInt(data.legalId, 10);
+        if (isNaN(legalIdNumber)) {
+            throw APIError.BadRequest({message: 'Некорректный ИНН'});
+        }
+        
         const user = await User.create({
             email: data.email,
             password: hashedPassword,
-            type: 'LGL',
             legalType: data.legalType,
-            legalId: data.legalId,
+            legalId: legalIdNumber,
             fullName: data.companyInfo.fullName,
             legalName: data.legalType === 'ЮЛ' ? data.companyInfo.legalName : undefined,
-            companyData: data.companyInfo.raw
+            bankAccount: data.bankAccount || undefined
         });
         return this.mapUser(user);
     }
@@ -88,5 +99,15 @@ export class UserService {
 
     async getAllUsers() {
         return User.find().select("-password").lean();
+    }
+
+    async banUser(userId: string, banned: boolean) {
+        const user = await User.findById(userId).select("-password");
+        if (!user) {
+            throw APIError.NotFound({message: 'Пользователь не найден'});
+        }
+        user.banned = banned;
+        await user.save();
+        return user;
     }
 }

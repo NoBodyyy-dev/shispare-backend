@@ -19,8 +19,8 @@ export class BlogController {
 
     getPost = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const posts = await this.blogService.getPost(req.params.slug);
-            res.status(200).json({posts});
+            const post = await this.blogService.getPost(req.params.slug);
+            res.status(200).json({post});
         } catch (e) {
             next(e);
         }

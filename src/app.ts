@@ -8,6 +8,7 @@ import cors from "cors";
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from "cookie-parser";
+import path from "path";
 import config from "./config/config";
 import bot from "./bot"
 import {errorMiddleware, notFoundMiddleware} from "./middleware/error.middleware";
@@ -33,7 +34,8 @@ const io = new Server(server, {
 export const socketService = new SocketService(io);
 export const orderService = new OrderService(socketService);
 
-app.use(express.json());
+app.use(express.json({limit: '50mb'}));
+app.use(express.urlencoded({extended: true, limit: '50mb'}));
 app.use(cookieParser(config.COOKIE_SECRET));
 // Security middlewares
 app.use(helmet());
@@ -46,6 +48,13 @@ app.use(cors({
     credentials: true,
     exposedHeaders: ['set-cookie']
 }));
+// Health check endpoint
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Статическая раздача счетов
+app.use("/invoices", express.static(path.join(__dirname, "../invoices")));
 app.use("/shispare", router);
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

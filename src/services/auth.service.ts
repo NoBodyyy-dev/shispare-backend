@@ -90,7 +90,7 @@ export class AuthService {
                 password: data.password,
                 legalType: data.legalType!,
                 legalId: data.legalId!,
-                companyInfo
+                companyInfo,
             });
         }
     }

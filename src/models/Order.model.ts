@@ -3,37 +3,37 @@ import {ICartProduct} from "../interfaces/product.interface";
 import {IPaymentMethodType} from "@a2seven/yoo-checkout";
 
 export enum OrderStatus {
-    PENDING = "pending",           // Ожидает подтверждения
-    PROCESSING = "processing",     // В обработке
-    CONFIRMED = "confirmed",       // Подтвержден
-    SHIPPED = "shipped",           // Отправлен
-    DELIVERED = "delivered",       // Доставлен
-    CANCELLED = "cancelled",       // Отменен
-    REFUNDED = "refunded"          // Возвращен
+    WAITING_FOR_PAYMENT = "waiting_for_payment",
+    PENDING = "pending",
+    PROCESSING = "processing",
+    CONFIRMED = "confirmed",
+    SHIPPED = "shipped",
+    DELIVERED = "delivered",
+    CANCELLED = "cancelled",
+    REFUNDED = "refunded"
 }
 
 export enum DeliveryType {
-    PICKUP = "pickup",             // Самовывоз
-    KRASNODAR = "krasnodar",       // Доставка по краснодару
-    RUSSIA = "russia",             // Доставка по России
+    PICKUP = "pickup",
+    KRASNODAR = "krasnodar",
+    RUSSIA = "russia",
 }
 
 export enum PaymentMethod {
-    CARD = "card",                 // Оплата картой
-    CASH = "cash",                 // Наличные при получении
-    SBP = "sbp",                   // Система быстрых платежей
-    INVOICE = "invoice",           // По счету для юр. лиц
-    PAYINSHOP = "pay_in_shop"      // Оплата в магазине
+    CARD = "card",
+    CASH = "cash",
+    SBP = "sbp",
+    INVOICE = "invoice",
+    PAYINSHOP = "pay_in_shop"
 }
 
-// Интерфейс для данных доставки
 export interface IDeliveryInfo {
-    city?: string;                  // Город (обязателен для доставки)
-    address?: string;               // Адрес (обязателен для доставки)
-    postalCode?: string;            // Почтовый индекс
-    recipientName?: string;         // ФИО получателя (обязателен для доставки)
-    phone: string;                  // Телефон получателя (всегда обязателен)
-    comment?: string;               // Комментарий к доставке
+    city?: string;
+    address?: string;
+    postalCode?: string;
+    recipientName?: string;
+    phone: string;
+    comment?: string;
 }
 
 export interface IFinallyCartItems {
@@ -44,26 +44,26 @@ export interface IFinallyCartItems {
 // Основной интерфейс заказа
 export interface IOrder extends Document {
     _id: Types.ObjectId;
-    orderNumber: string;                // Уникальный номер заказа (генерируется)
-    owner: Types.ObjectId;              // Пользователь, оформивший заказ
-    items: IFinallyCartItems[];         // Состав заказа
-    totalAmount: number;                // Общая сумма
-    totalProducts: number;              // Общее количество товаров
-    discountAmount: number;             // Сумма скидки
-    finalAmount: number;                // Итоговая сумма к оплате
-    status: OrderStatus;                // Статус заказа
-    deliveryType: DeliveryType;         // Способ доставки
-    deliveryInfo: IDeliveryInfo;        // Данные доставки
-    paymentMethod: IPaymentMethodType;  // Способ оплаты
-    paymentStatus?: boolean;            // Статус оплаты
-    paymentId?: string;                 // Айди платежа
-    invoiceUrl?: string;                // Ссылка на счет/накладную
-    trackingNumber?: string;            // Трек-номер для отслеживания
-    createdAt: Date;                    // Дата создания
-    updatedAt: Date;                    // Дата обновления
-    cancelledAt?: Date;                 // Дата отмены
-    canceledCaused?: string;            // Причина отмены
-    deliveredAt?: Date;                 // Дата доставки
+    orderNumber: string;
+    owner: Types.ObjectId;
+    items: IFinallyCartItems[];
+    totalAmount: number;
+    totalProducts: number;
+    discountAmount: number;
+    finalAmount: number;
+    status: OrderStatus;
+    deliveryType: DeliveryType;
+    deliveryInfo: IDeliveryInfo;
+    paymentMethod: IPaymentMethodType;
+    paymentStatus?: boolean;
+    paymentId?: string;
+    invoiceUrl?: string;
+    trackingNumber?: string;
+    createdAt: Date;
+    updatedAt: Date;
+    cancelledAt?: Date;
+    canceledCaused?: string;
+    deliveredAt?: Date;
     documentUrl?: string;
 }
 

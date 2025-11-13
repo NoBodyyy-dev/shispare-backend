@@ -8,8 +8,8 @@ export class CommentController {
 
     getProductComments = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const comments = this.commentService.getProductComments(req.params.product);
-            res.status(200).json(comments);
+            const comments = await this.commentService.getProductComments(req.params.product);
+            res.status(200).json({comments});
         } catch (e) {
             next(e);
         }

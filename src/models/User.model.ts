@@ -1,5 +1,12 @@
 import mongoose from "mongoose";
 
+export interface IBankAccount {
+    accountNumber?: string; // Номер расчетного счета
+    bankName?: string; // Название банка
+    bik?: string; // БИК банка
+    correspondentAccount?: string; // Корреспондентский счет
+}
+
 export interface IUser {
     _id: mongoose.Types.ObjectId;
     fullName: string;
@@ -10,6 +17,7 @@ export interface IUser {
     banned: boolean;
     legalType?: string;
     legalId?: number;
+    bankAccount?: IBankAccount; // Реквизиты расчетного счета для юридических лиц
     telegramId?: number;
     personalKey: string;
     online: boolean;
@@ -28,6 +36,12 @@ const userSchema = new mongoose.Schema<IUser>({
     },
     legalType: { type: String, enum: ["ЮЛ", "ИП"] },
     legalId: { type: Number },
+    bankAccount: {
+        accountNumber: { type: String },
+        bankName: { type: String },
+        bik: { type: String },
+        correspondentAccount: { type: String }
+    },
     telegramId: { type: Number, unique: true, sparse: true },
     personalKey: { type: String, required: true, unique: true },
     banned: { type: Boolean, required: true, default: false },

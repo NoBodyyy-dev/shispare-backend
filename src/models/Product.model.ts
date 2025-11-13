@@ -20,6 +20,13 @@ export interface IVariant {
     countInStock: number;  // Остаток
 }
 
+export interface ISEO {
+    metaTitle?: string;        // SEO заголовок
+    metaDescription?: string;  // SEO описание
+    metaKeywords?: string;     // SEO ключевые слова
+    ogImage?: string;          // Изображение для Open Graph
+}
+
 export interface IProduct extends Document {
     title: string;                     // Название товара
     description: string;              // Описание
@@ -36,6 +43,7 @@ export interface IProduct extends Document {
     shelfLife: string,
     characteristics: string[],
     documents: string[];
+    seo?: ISEO;                        // SEO данные
     createdAt: Date;
     updatedAt: Date;
 }
@@ -85,6 +93,12 @@ const productSchema = new Schema<IProduct>(
         isActive: {type: Boolean, default: true},
         variants: {type: [variantSchema], default: []},
         documents: {type: [String], default: []},
+        seo: {
+            metaTitle: {type: String, trim: true},
+            metaDescription: {type: String, trim: true},
+            metaKeywords: {type: String, trim: true},
+            ogImage: {type: String, trim: true},
+        },
     },
     {
         timestamps: true,

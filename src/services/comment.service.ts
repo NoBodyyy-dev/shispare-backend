@@ -3,11 +3,17 @@ import {APIError} from "./error.service";
 
 export class CommentService {
     async getProductComments(product: string) {
-        return Comment.find({product});
+        return Comment.find({product})
+            .populate("owner", "fullName _id")
+            .populate("product", "title slug _id")
+            .sort({createdAt: -1});
     }
 
     async getUserComments(owner: string) {
-        return Comment.find({owner});
+        return Comment.find({owner})
+            .populate("owner", "fullName _id")
+            .populate("product", "title slug _id")
+            .sort({createdAt: -1});
     }
 
     async getComment(_id: string) {

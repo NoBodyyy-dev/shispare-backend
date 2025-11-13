@@ -11,7 +11,7 @@ export class SocketService {
     private onlineUsers = new Map<string, string>();
     private onlineAdmins = new Map<string, { _id: string; fullName: string }>();
     private readonly MAX_ROOMS_PER_USER = 10;
-    private chatService: ChatService; // ✅ сервис чата
+    private chatService: ChatService;
 
     constructor(io: Server) {
         this.io = io;
@@ -59,19 +59,21 @@ export class SocketService {
             socket.on('admin:getOrders', async (callback) => {
                 try {
                     const orders = await orderService.getAllOrders();
-                    console.log(orders);
+                    console.log(">>>>", orders);
                     callback({success: true, orders});
                 } catch (err) {
                     callback({success: false, message: "Ошибка получения заказов"});
                 }
             });
 
-            socket.on("admin:updateOrderStatus", async ({orderId, status}: {
+            socket.on("admin:updateOrderStatus", async ({orderId, status, cancellationReason, deliveryDate}: {
                 orderId: string,
-                status: OrderStatus
+                status: OrderStatus,
+                cancellationReason?: string,
+                deliveryDate?: string
             }, callback) => {
                 try {
-                    const order = await orderService.updateOrderStatus(orderId, status);
+                    const order = await orderService.updateOrderStatus(orderId, status, cancellationReason, deliveryDate);
                     this.sendToAdmins("admin:orderUpdated", order);
                     callback({success: true, order});
                 } catch (err: any) {
@@ -107,7 +109,7 @@ export class SocketService {
 
             socket.on("chat:sendMessage", async ({content, attachments, replyTo}: {
                 content: string,
-                attachments?: string[],
+                attachments?: Array<{type: 'image' | 'video' | 'file'; url: string; filename: string}>,
                 replyTo?: string
             }, callback) => {
                 try {

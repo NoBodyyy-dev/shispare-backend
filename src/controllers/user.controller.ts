@@ -69,4 +69,26 @@ export class UserController {
             next(e);
         }
     }
+
+    // Admin: ban or unban a user
+    banUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+        try {
+            const userId = req.params.id;
+            const {banned} = req.body;
+
+            if (typeof banned !== 'boolean') {
+                res.status(400).json({success: false, message: 'banned должен быть boolean'});
+                return
+            }
+
+            const user = await this.userService.banUser(userId, banned);
+            res.status(200).json({
+                success: true,
+                message: banned ? 'Пользователь заблокирован' : 'Пользователь разблокирован',
+                user
+            });
+        } catch (e) {
+            next(e);
+        }
+    }
 }
