@@ -141,15 +141,9 @@ cartSchema.methods.updateQuantity = async function (
             i.product.toString() === productId.toString() &&
             i.article === article
     );
-    
-    // Если товара нет в корзине, добавляем его с указанным количеством
-    if (idx < 0) {
-        this.items.push({product: productId, article, quantity});
-    } else {
-        // Если товар есть, обновляем количество
-        this.items[idx].quantity = quantity;
-    }
-    
+    if (idx < 0) throw new Error("Товар не найден в корзине");
+
+    this.items[idx].quantity = quantity;
     await this.recalcCart();
     await this.save();
 };

@@ -12,7 +12,8 @@ export const createCategory = async (req: Request, res: Response, next: NextFunc
     try {
         const category = new Category({
             title,
-            slug
+            slug,
+            level: 1,
         })
         await category.save();
         return res.status(201).json({category});
@@ -23,7 +24,7 @@ export const createCategory = async (req: Request, res: Response, next: NextFunc
 
 export const getAllCategories = async (_: Request, res: Response, next: NextFunction) => {
     try {
-        const categories = await Category.find();
+        const categories = await Category.find({ level: 1 });
         console.log(categories);
         return res.status(200).json({categories: categories});
     } catch (e) {

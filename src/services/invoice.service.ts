@@ -10,7 +10,7 @@ export class InvoiceService {
      * Генерирует счет на оплату для юридического лица
      */
     async generateInvoice(order: IOrder, user: IUser): Promise<string> {
-        if (!user.legalType || !user.bankAccount?.accountNumber) {
+        if (!user.legalType) {
             throw APIError.BadRequest({
                 message: "Для генерации счета необходимы реквизиты расчетного счета"
             });
@@ -23,17 +23,17 @@ export class InvoiceService {
                 select: "title variants"
             })
             .lean();
-        
+
         if (!populatedOrder) {
             throw APIError.NotFound({message: "Заказ не найден"});
         }
 
         // Путь к шаблону счета
         const templatePath = path.join(__dirname, "../template/invoice.hbs");
-        
+
         // Если шаблона нет, создаем простой HTML
         let htmlContent: string;
-        
+
         if (fs.existsSync(templatePath)) {
             const template = fs.readFileSync(templatePath, "utf-8");
             const compiledTemplate = handlebars.compile(template);
@@ -106,15 +106,6 @@ export class InvoiceService {
         <p><strong>${user.legalName || user.fullName}</strong></p>
         ${user.legalType === "ЮЛ" ? `<p>ОГРН: ${user.legalId}</p>` : `<p>ОГРНИП: ${user.legalId}</p>`}
         <p>ИНН: ${user.legalId}</p>
-        ${user.bankAccount ? `
-        <div class="bank-details">
-            <h4>Реквизиты для оплаты:</h4>
-            <p>Расчетный счет: ${user.bankAccount.accountNumber || "Не указан"}</p>
-            <p>Банк: ${user.bankAccount.bankName || "Не указан"}</p>
-            <p>БИК: ${user.bankAccount.bik || "Не указан"}</p>
-            ${user.bankAccount.correspondentAccount ? `<p>Корр. счет: ${user.bankAccount.correspondentAccount}</p>` : ""}
-        </div>
-        ` : ""}
     </div>
     
     <div class="invoice-info">
@@ -134,16 +125,16 @@ export class InvoiceService {
         </thead>
         <tbody>
             ${(order.items as any[]).map((item, index) => {
-                // В order.items сохраняются только product (ObjectId) и quantity
-                // После populate product содержит полную информацию о товаре
-                const product = typeof item.product === 'object' && item.product ? item.product : null;
-                const productTitle = product?.title || "Товар";
-                // Получаем цену из первого варианта товара (можно улучшить, если нужно учитывать конкретный вариант)
-                const productPrice = product?.variants?.[0]?.price || 0;
-                const quantity = item.quantity || 1;
-                const itemTotal = quantity * productPrice;
-                
-                return `
+            // В order.items сохраняются только product (ObjectId) и quantity
+            // После populate product содержит полную информацию о товаре
+            const product = typeof item.product === 'object' && item.product ? item.product : null;
+            const productTitle = product?.title || "Товар";
+            // Получаем цену из первого варианта товара (можно улучшить, если нужно учитывать конкретный вариант)
+            const productPrice = product?.variants?.[0]?.price || 0;
+            const quantity = item.quantity || 1;
+            const itemTotal = quantity * productPrice;
+
+            return `
             <tr>
                 <td>${index + 1}</td>
                 <td>${productTitle}</td>
@@ -152,7 +143,7 @@ export class InvoiceService {
                 <td>${itemTotal.toFixed(2)} ₽</td>
             </tr>
             `;
-            }).join("")}
+        }).join("")}
         </tbody>
     </table>
     
@@ -171,4 +162,3 @@ export class InvoiceService {
         `.trim();
     }
 }
-

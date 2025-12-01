@@ -9,7 +9,5 @@ orderRouter.get("/get-user-orders/:id", authMiddleware, OrderController.getUserO
 orderRouter.get("/get-order/:orderNumber", authMiddleware, OrderController.getOrderByNumber);
 orderRouter.post("/create", [authMiddleware], OrderController.createOrder);
 orderRouter.patch("/:orderId/status", [authMiddleware, validateOrderUpdate], OrderController.updateOrderStatus);
-// Этот роут должен быть последним, чтобы не перехватывать другие запросы
-orderRouter.get("/:orderNumber", authMiddleware, OrderController.getOneOrder);
 
 

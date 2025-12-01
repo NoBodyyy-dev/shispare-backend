@@ -62,8 +62,9 @@ export interface IOrder extends Document {
     createdAt: Date;
     updatedAt: Date;
     cancelledAt?: Date;
-    canceledCaused?: string;
-    deliveredAt?: Date;
+    cancellationReason?: string; // Причина отмены заказа
+    deliveryDate?: string; // Ориентировочная дата доставки (для подтвержденных заказов)
+    deliveredAt?: Date; // Фактическая дата доставки
     documentUrl?: string;
 }
 
@@ -77,6 +78,7 @@ const OrderSchema = new Schema<IOrder>({
     owner: {type: Schema.Types.ObjectId, ref: 'User', required: true, index: true},
     items: [{
         product: {type: Schema.Types.ObjectId, ref: 'Product', required: true},
+        article: {type: Number},
         quantity: {type: Number, required: true, min: 1},
     }],
     totalAmount: {type: Number, required: true, min: 0},
@@ -99,7 +101,9 @@ const OrderSchema = new Schema<IOrder>({
     invoiceUrl: {type: String},
     trackingNumber: {type: String},
     cancelledAt: {type: Date},
-    deliveredAt: {type: Date},
+    cancellationReason: {type: String}, // Причина отмены заказа
+    deliveryDate: {type: String}, // Ориентировочная дата доставки (для подтвержденных заказов)
+    deliveredAt: {type: Date}, // Фактическая дата доставки
     documentUrl: {type: String},
 }, {
     timestamps: true,

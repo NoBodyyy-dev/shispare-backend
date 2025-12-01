@@ -6,7 +6,6 @@ import { toObjID } from "../utils/utils";
 export class CartService {
     async initialCart(owner: string) {
         let cart = await Cart.findOne({ owner });
-        console.log("cart >>>", cart)
         if (!cart) {
             cart = new Cart({ owner, items: [] });
             await cart.save();
@@ -21,12 +20,24 @@ export class CartService {
             .populate({
                 path: 'items.product',
                 model: 'Product',
-                populate: {
-                    path: 'category',
-                    model: 'Category'
-                }
+                populate: [
+                    {
+                        path: 'category',
+                        model: 'Category'
+                    },
+                    {
+                        path: 'subcategory',
+                        model: 'Category'
+                    }
+                ]
             })
             .lean();
+        
+        // Фильтруем элементы с null product (если товар был удален)
+        if (populatedCart && populatedCart.items) {
+            populatedCart.items = populatedCart.items.filter((item: any) => item.product !== null);
+        }
+        
         return populatedCart || cart;
     }
 
@@ -65,12 +76,24 @@ export class CartService {
             .populate({
                 path: 'items.product',
                 model: 'Product',
-                populate: {
-                    path: 'category',
-                    model: 'Category'
-                }
+                populate: [
+                    {
+                        path: 'category',
+                        model: 'Category'
+                    },
+                    {
+                        path: 'subcategory',
+                        model: 'Category'
+                    }
+                ]
             })
             .lean();
+        
+        // Фильтруем элементы с null product (если товар был удален)
+        if (populatedCart && populatedCart.items) {
+            populatedCart.items = populatedCart.items.filter((item: any) => item.product !== null);
+        }
+        
         return populatedCart || cart;
     }
 
@@ -106,12 +129,24 @@ export class CartService {
             .populate({
                 path: 'items.product',
                 model: 'Product',
-                populate: {
-                    path: 'category',
-                    model: 'Category'
-                }
+                populate: [
+                    {
+                        path: 'category',
+                        model: 'Category'
+                    },
+                    {
+                        path: 'subcategory',
+                        model: 'Category'
+                    }
+                ]
             })
             .lean();
+        
+        // Фильтруем элементы с null product (если товар был удален)
+        if (populatedCart && populatedCart.items) {
+            populatedCart.items = populatedCart.items.filter((item: any) => item.product !== null);
+        }
+        
         return populatedCart || cart;
     }
 
@@ -137,12 +172,24 @@ export class CartService {
             .populate({
                 path: 'items.product',
                 model: 'Product',
-                populate: {
-                    path: 'category',
-                    model: 'Category'
-                }
+                populate: [
+                    {
+                        path: 'category',
+                        model: 'Category'
+                    },
+                    {
+                        path: 'subcategory',
+                        model: 'Category'
+                    }
+                ]
             })
             .lean();
+        
+        // Фильтруем элементы с null product (если товар был удален)
+        if (populatedCart && populatedCart.items) {
+            populatedCart.items = populatedCart.items.filter((item: any) => item.product !== null);
+        }
+        
         return populatedCart || cart;
     }
 
@@ -180,12 +227,24 @@ export class CartService {
             .populate({
                 path: 'items.product',
                 model: 'Product',
-                populate: {
-                    path: 'category',
-                    model: 'Category'
-                }
+                populate: [
+                    {
+                        path: 'category',
+                        model: 'Category'
+                    },
+                    {
+                        path: 'subcategory',
+                        model: 'Category'
+                    }
+                ]
             })
             .lean();
+        
+        // Фильтруем элементы с null product (если товар был удален)
+        if (populatedCart && populatedCart.items) {
+            populatedCart.items = populatedCart.items.filter((item: any) => item.product !== null);
+        }
+        
         return populatedCart || cart;
     }
 }

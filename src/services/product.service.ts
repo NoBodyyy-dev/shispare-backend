@@ -6,11 +6,16 @@ import {CloudService} from "./cloud.service";
 
 export class ProductService {
     private cloudService = new CloudService();
+    private readonly categoryFields = "name slug title level";
+
     async checkProducts(productIds: string[]): Promise<IProduct[]> {
         if (!Array.isArray(productIds) || productIds.length === 0)
             throw APIError.BadRequest({message: "Передайте массив productIds"});
 
-        return Product.find({_id: {$in: productIds}}).lean();
+        return Product.find({_id: {$in: productIds}})
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
+            .lean();
     }
 
     async createProduct(data: {
@@ -76,34 +81,121 @@ export class ProductService {
         });
 
         await product.save();
-        return product;
+        await product.populate("category", this.categoryFields);
+        await product.populate("subcategory", this.categoryFields);
+        return product.toObject();
     }
 
-    async getProductsByCategory(categorySlug: string) {
-        console.log(categorySlug);
+    async getProductsByCategory(
+        categorySlug: string,
+        filters: Record<string, unknown> = {}
+    ) {
         const category = await Category.findOne({slug: categorySlug});
-        console.log(">>>", category?._id);
         if (!category) throw APIError.NotFound({message: "Категория не найдена"});
 
         const products = await Product
             .find({category: category._id.toString(), isActive: true})
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .lean();
-        console.log(">>>>> products >>>>>", products)
 
-        return {products};
+        const priceMin = this.parseNumber(filters.priceMin, 0);
+        const priceMax = this.parseNumber(filters.priceMax, Number.MAX_SAFE_INTEGER);
+        const color = this.parseStringFilter(filters.color);
+        const packageType = this.parseStringFilter(filters.packageType);
+        const requireStock = this.parseBooleanFilter(filters.inStock, false);
+        const sort = this.parseSort(filters.sort);
+
+        const filtered = products
+            .map(product => {
+                const variants = (product.variants || []).filter(variant => {
+                    if (typeof variant.price !== "number") return false;
+                    if (variant.price < priceMin || variant.price > priceMax) return false;
+                    if (color && variant?.color?.ru !== color) return false;
+                    if (packageType && variant?.package?.type !== packageType) return false;
+                    if (requireStock && (variant?.countInStock ?? 0) <= 0) return false;
+                    return true;
+                });
+
+                return {
+                    ...product,
+                    variants,
+                };
+            })
+            .filter(product => product.variants.length > 0);
+
+        const sortByPrice = (item: any, mode: "min" | "max") => {
+            const prices = item.variants.map((v: any) => (typeof v.price === "number" ? v.price : 0));
+            if (!prices.length) return 0;
+            return mode === "max" ? Math.max(...prices) : Math.min(...prices);
+        };
+
+        const sortByStock = (item: any) =>
+            item.variants.reduce((sum: number, variant: any) => sum + (variant.countInStock || 0), 0);
+
+        filtered.sort((a, b) => {
+            switch (sort) {
+                case "price-desc":
+                    return sortByPrice(b, "max") - sortByPrice(a, "max");
+                case "stock-asc":
+                    return sortByStock(a) - sortByStock(b);
+                case "stock-desc":
+                    return sortByStock(b) - sortByStock(a);
+                case "rating-desc":
+                    return (b.displayedRating || 0) - (a.displayedRating || 0);
+                case "rating-asc":
+                    return (a.displayedRating || 0) - (b.displayedRating || 0);
+                case "price-asc":
+                default:
+                    return sortByPrice(a, "min") - sortByPrice(b, "min");
+            }
+        });
+
+        return filtered;
+    }
+
+    private parseNumber(value: unknown, fallback: number): number {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string" && value.trim().length > 0) {
+            const parsed = Number(value);
+            if (!Number.isNaN(parsed)) return parsed;
+        }
+        return fallback;
+    }
+
+    private parseStringFilter(value: unknown): string | undefined {
+        if (typeof value !== "string") return undefined;
+        const normalized = value.trim();
+        return normalized && normalized !== "all" ? normalized : undefined;
+    }
+
+    private parseBooleanFilter(value: unknown, fallback: boolean): boolean {
+        if (typeof value === "boolean") return value;
+        if (typeof value === "string") {
+            return ["true", "1", "yes", "on"].includes(value.toLowerCase());
+        }
+        return fallback;
+    }
+
+    private parseSort(value: unknown): string {
+        if (typeof value !== "string") return "price-asc";
+        const allowed = new Set(["price-asc", "price-desc", "stock-asc", "stock-desc", "rating-asc", "rating-desc"]);
+        return allowed.has(value) ? value : "price-asc";
     }
 
     async getProduct(article: number) {
-        console.log(article);
-        const product = await Product.findOne({"variants.article": article, isActive: true}).lean();
-        console.log(product);
+        const product = await Product.findOne({"variants.article": article, isActive: true})
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
+            .lean();
         if (!product) throw APIError.NotFound({message: "Товар не найден"});
         return product;
     }
 
     async getPopularProducts(limit = 12) {
         return Product.find({isActive: true})
-            .populate("category")
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .sort({totalPurchases: -1})
             .limit(limit)
             .lean();
@@ -114,7 +206,8 @@ export class ProductService {
             isActive: true,
             "variants.discount": {$gt: 0},
         })
-            .populate("category")
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .limit(limit)
             .lean();
     }
@@ -124,7 +217,8 @@ export class ProductService {
             displayedRating: {$gt: 0},
             isActive: true,
         })
-            .populate("category")
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .sort({displayedRating: -1})
             .limit(limit)
             .lean();
@@ -132,7 +226,9 @@ export class ProductService {
 
     async updateProduct(productId: string, updateData: Partial<IProduct>) {
         if (updateData.title) updateData.slug = createSlug(updateData.title);
-        const product = await Product.findByIdAndUpdate(productId, updateData, {new: true});
+        const product = await Product.findByIdAndUpdate(productId, updateData, {new: true})
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields);
         if (!product) throw APIError.NotFound({message: "Товар не найден"});
         return product.toObject();
     }
@@ -161,9 +257,10 @@ export class ProductService {
         }
 
         const results = await Product.find(searchConditions)
-            .populate("category", "name slug")
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .limit(50)
-            .select("title slug images variants characteristics category")
+            .select("title slug images variants characteristics category subcategory")
             .lean();
 
         // Если поиск по артикулу и ничего не найдено, пробуем точный поиск
@@ -172,8 +269,9 @@ export class ProductService {
                 "variants.article": articleNumber,
                 isActive: true,
             })
-                .populate("category", "name slug")
-                .select("title slug images variants characteristics category")
+                .populate("category", this.categoryFields)
+                .populate("subcategory", this.categoryFields)
+                .select("title slug images variants characteristics category subcategory")
                 .lean();
             
             if (exactMatch) {
@@ -193,7 +291,8 @@ export class ProductService {
             "variants.article": article,
             isActive: true,
         })
-            .populate("category", "name slug")
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .lean();
     }
 
@@ -220,9 +319,10 @@ export class ProductService {
         }
 
         const products = await Product.find(searchConditions)
-            .populate("category", "name slug title")
+            .populate("category", this.categoryFields)
+            .populate("subcategory", this.categoryFields)
             .limit(5)
-            .select("title slug images variants characteristics category")
+            .select("title slug images variants characteristics category subcategory")
             .lean();
 
         // Добавляем variantIndex для каждого продукта

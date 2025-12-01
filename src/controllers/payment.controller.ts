@@ -20,7 +20,6 @@ export class PaymentController {
                 paymentData: {type, amount},
                 orderData: {orderId, description}
             })
-            console.log(">>>>>>>++++", payment);
 
             res.json(payment);
         } catch (e) {
@@ -56,30 +55,22 @@ export class PaymentController {
         }
     }
 
-    /**
-     * Webhook для обработки уведомлений от YooKassa
-     */
     handleWebhook = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const event = req.body;
             console.log("Payment webhook received:", event);
 
-            // YooKassa отправляет уведомления в формате:
-            // { event: "payment.succeeded", object: { id: "...", status: "succeeded", ... } }
             if (event.event === "payment.succeeded" && event.object) {
                 const payment = event.object;
-                
+
                 if (payment.status === "succeeded") {
-                    // Обрабатываем успешную оплату
                     await this.orderService.handlePaymentSuccess(payment.id);
                 }
             }
 
-            // Всегда возвращаем 200 OK для YooKassa
             res.status(200).json({ received: true });
         } catch (e) {
             console.error("Error processing payment webhook:", e);
-            // Все равно возвращаем 200, чтобы YooKassa не повторял запрос
             res.status(200).json({ received: true, error: "Internal error" });
         }
     }

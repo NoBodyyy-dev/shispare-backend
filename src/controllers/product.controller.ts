@@ -40,10 +40,26 @@ export class ProductController {
 
     getProductsByCategory = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const products = await this.productService.getProductsByCategory(req.params.slug);
-            console.log("controller >>>", products);
+            const {
+                priceMin,
+                priceMax,
+                color,
+                packageType,
+                inStock,
+                sort,
+            } = req.query;
 
-            res.status(200).json({ success: true, products: {...products } });
+            const filters = {
+                priceMin,
+                priceMax,
+                color,
+                packageType,
+                inStock,
+                sort,
+            };
+
+            const products = await this.productService.getProductsByCategory(req.params.slug, filters);
+            res.status(200).json({ success: true, products });
         } catch (e) {
             next(e);
         }

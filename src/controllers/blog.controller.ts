@@ -19,8 +19,8 @@ export class BlogController {
 
     getPost = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const post = await this.blogService.getPost(req.params.slug);
-            res.status(200).json({post});
+            const posts = await this.blogService.getPost(req.params.slug);
+            res.status(200).json({posts});
         } catch (e) {
             next(e);
         }
@@ -42,7 +42,7 @@ export class BlogController {
 
     updatePost = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const post = await this.blogService.updatePost(req.params.id, req.body);
+            const post = await this.blogService.updatePost(req.params.id, req.body, req.file);
             res.status(200).json({post});
         } catch (e) {
             next(e);
@@ -51,8 +51,8 @@ export class BlogController {
 
     deletePost = async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const post = await this.blogService.deletePost(req.params.id);
-            res.status(200).json({post});
+            const result = await this.blogService.deletePost(req.params.id);
+            res.status(200).json({post: result});
         } catch (e) {
             next(e);
         }

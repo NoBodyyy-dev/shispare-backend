@@ -32,7 +32,8 @@ export class ChatService {
             .populate('replyTo.senderId')
             .lean();
 
-        this.socketService.sendToAdmins('chat:newMessage', populatedMessage);
+        // Отправляем сообщение всем пользователям через сокеты
+        this.socketService.io.emit('chat:newMessage', populatedMessage);
 
         return populatedMessage;
     }
@@ -42,21 +43,29 @@ export class ChatService {
         if (!message) throw new Error('Message not found');
         if (message.senderId.toString() !== editorId) throw new Error('Permission denied');
 
-        message.content = newContent ?? message.content;
-        message.attachments = newAttachments ?? message.attachments;
+        // Обновляем контент, если передан
+        if (newContent !== undefined) {
+            message.content = newContent;
+        }
+        
+        // Обновляем вложения, если переданы
+        if (newAttachments !== undefined) {
+            message.attachments = newAttachments;
+        }
+        
         message.edited = true;
         message.updatedAt = new Date();
 
         await message.save();
         
-        const populatedMessage = await Message.findById(message._id)
+        const populatedMessage = await Message.findById(messageId)
             .populate('senderId')
             .populate('replyTo')
             .populate('replyTo.senderId')
             .lean();
-            
-        // Отправляем обновленное сообщение всем пользователям чата
-        this.socketService.sendToRoom('notifications', 'chat:editMessage', populatedMessage);
+        
+        // Отправляем обновленное сообщение всем пользователям через сокеты
+        this.socketService.io.emit('chat:editMessage', populatedMessage);
         return populatedMessage;
     }
 
@@ -66,7 +75,8 @@ export class ChatService {
         if (message.senderId.toString() !== deleterId) throw new Error('Permission denied');
 
         await message.deleteOne();
-        this.socketService.sendToAdmins('chat:deleteMessage', {messageId});
+        // Отправляем событие удаления всем пользователям через сокеты
+        this.socketService.io.emit('chat:deleteMessage', {messageId});
         return true;
     }
 

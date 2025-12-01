@@ -47,9 +47,8 @@ export class OrderService {
 
             const orderItems = await this.buildOrderItems(cart);
 
-            // Определяем начальный статус заказа
             const requiresPayment = ![PaymentMethod.CASH, PaymentMethod.INVOICE, PaymentMethod.PAYINSHOP].includes(paymentMethod);
-            const initialStatus = requiresPayment ? OrderStatus.WAITING_FOR_PAYMENT : OrderStatus.PROCESSING;
+            const initialStatus = requiresPayment ? OrderStatus.WAITING_FOR_PAYMENT : OrderStatus.PENDING;
 
             const order = new Order({
                 owner: user._id,
@@ -78,12 +77,19 @@ export class OrderService {
                         orderId: order._id.toString(),
                         description: `Заказ №${order.orderNumber}`,
                     },
+                    userId: user._id.toString(),
+                    orderNumber: order.orderNumber
                 });
 
                 order.paymentId = payment.id;
             }
 
             await order.save();
+
+            this.senderService.sendNewOrderNotificationToAdmins(order._id.toString())
+                .catch(error => {
+                    console.error("Ошибка при отправке уведомлений администраторам:", error);
+                });
 
             for (const item of cart.items) {
                 await this.productService.decreaseStock(
@@ -95,40 +101,23 @@ export class OrderService {
             }
 
             await cart.clearCart();
-            
-            // Убеждаемся, что корзина очищена
             await cart.save();
 
-            // Для заказов без оплаты сразу переводим в PENDING
-            if (!requiresPayment) {
-                setTimeout(async () => {
-                    order.status = OrderStatus.PENDING;
-                    await order.save();
-
+            setTimeout(async () => {
+                if (!requiresPayment) {
                     this.socketService.notifyOrderUpdate(order._id.toString(), {
                         ownerId: user._id.toString(),
                         status: OrderStatus.PENDING,
                     });
+                }
 
-                    await this.senderService.sendMessagesAboutCreatedOrder({
-                        to: user.email,
-                        orderId: order._id.toString(),
-                        orderNumber: order.orderNumber,
-                        telegramId: user.telegramId,
-                    });
-                }, 500);
-            } else {
-                // Для заказов с оплатой отправляем уведомление о создании заказа
-                // Статус изменится на PENDING после успешной оплаты через webhook
-                setTimeout(async () => {
-                    await this.senderService.sendMessagesAboutCreatedOrder({
-                        to: user.email,
-                        orderId: order._id.toString(),
-                        orderNumber: order.orderNumber,
-                        telegramId: user.telegramId,
-                    });
-                }, 500);
-            }
+                await this.senderService.sendMessagesAboutCreatedOrder({
+                    to: user.email,
+                    orderId: order._id.toString(),
+                    orderNumber: order.orderNumber,
+                    telegramId: user.telegramId,
+                });
+            }, 500);
 
             return {
                 order,
@@ -137,8 +126,6 @@ export class OrderService {
                     : null,
             };
         } catch (err) {
-            // В случае ошибки заказ не будет создан, остатки не будут изменены
-            // Это обеспечивает консистентность данных даже без транзакций
             throw err;
         }
     }
@@ -216,11 +203,16 @@ export class OrderService {
         const order = await Order.findById(orderId);
         if (!order) throw APIError.NotFound({message: "Заказ не найден"});
 
-        if (newStatus === OrderStatus.CANCELLED && order.paymentId) {
-            await this.paymentService.refundPayment(order.paymentId);
+        if (newStatus === OrderStatus.CANCELLED) {
             order.cancelledAt = new Date();
-            if (cancellationReason) {
-                order.canceledCaused = cancellationReason;
+            if (cancellationReason && cancellationReason.trim()) {
+                order.cancellationReason = cancellationReason;
+            } else if (!order.cancellationReason) {
+                // Если причина не передана и не сохранена, устанавливаем значение по умолчанию
+                order.cancellationReason = "Причина не указана";
+            }
+            if (order.paymentId) {
+                await this.paymentService.refundPayment(order.paymentId);
             }
         }
 
@@ -230,22 +222,12 @@ export class OrderService {
         }
 
         if (newStatus === OrderStatus.CONFIRMED && deliveryDate) {
-            // Можно сохранить дату доставки, если нужно
+            // Сохраняем ориентировочную дату доставки
+            order.deliveryDate = deliveryDate;
         }
 
-        // Генерируем счет на оплату для юридических лиц при подтверждении заказа
         if (newStatus === OrderStatus.CONFIRMED) {
             const user = await User.findById(order.owner);
-            if (user && user.legalType && user.bankAccount?.accountNumber) {
-                try {
-                    const invoiceUrl = await this.invoiceService.generateInvoice(order, user);
-                    order.documentUrl = invoiceUrl;
-                    order.invoiceUrl = invoiceUrl;
-                } catch (error) {
-                    console.error("Ошибка генерации счета:", error);
-                    // Не прерываем процесс, просто логируем ошибку
-                }
-            }
         }
 
         order.status = newStatus;
@@ -253,13 +235,24 @@ export class OrderService {
 
         const user = await User.findById(order.owner);
         if (user) {
+            // Для отмененных заказов используем сохраненную причину, если она не передана
+            // Для подтвержденных заказов используем сохраненную дату доставки, если она не передана
+            const reasonToSend = newStatus === OrderStatus.CANCELLED 
+                ? (cancellationReason || order.cancellationReason || "Причина не указана")
+                : cancellationReason;
+            
+            const deliveryDateToSend = newStatus === OrderStatus.CONFIRMED
+                ? (deliveryDate || order.deliveryDate)
+                : deliveryDate;
+
+            // Отправляем email пользователю об изменении статуса заказа
             await this.senderService.sendOrderStatusUpdateEmail({
                 to: user.email,
                 orderNumber: order.orderNumber,
                 status: newStatus,
                 orderId: order._id.toString(),
-                cancellationReason: cancellationReason,
-                deliveryDate: deliveryDate,
+                cancellationReason: reasonToSend,
+                deliveryDate: deliveryDateToSend,
                 invoiceUrl: order.invoiceUrl,
             });
         }
@@ -279,6 +272,21 @@ export class OrderService {
             .lean();
     }
 
+    async hasUserPurchasedProduct(userId: string, productId: string): Promise<boolean> {
+        // Проверяем, есть ли у пользователя заказы с этим товаром
+        // Учитываем только доставленные или оплаченные заказы (исключаем отмененные)
+        const orders = await Order.find({
+            owner: userId,
+            status: {
+                $nin: [OrderStatus.CANCELLED, OrderStatus.REFUNDED]
+            },
+            "items.product": productId
+        }).select("items").lean();
+
+        // Если найдены заказы с таким товаром, возвращаем true
+        return orders.length > 0;
+    }
+
     async getAllOrders() {
         return Order.find()
             .populate("owner")
@@ -294,9 +302,14 @@ export class OrderService {
             .populate("owner")
             .populate({
                 path: "items.product",
-                populate: {
-                    path: "category"
-                }
+                populate: [
+                    {
+                        path: "category"
+                    },
+                    {
+                        path: "subcategory"
+                    }
+                ]
             })
             .lean();
         

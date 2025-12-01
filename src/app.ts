@@ -62,6 +62,7 @@ app.use(errorMiddleware);
 async function run(): Promise<void> {
     try {
         await mongoose.connect(config.DB_URI);
+
         server.listen(config.APP_PORT);
         console.log(`App started - http://localhost:${config.APP_PORT}`);
         await bot.launch();

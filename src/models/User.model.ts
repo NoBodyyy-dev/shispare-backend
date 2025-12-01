@@ -1,12 +1,5 @@
 import mongoose from "mongoose";
 
-export interface IBankAccount {
-    accountNumber?: string; // Номер расчетного счета
-    bankName?: string; // Название банка
-    bik?: string; // БИК банка
-    correspondentAccount?: string; // Корреспондентский счет
-}
-
 export interface IUser {
     _id: mongoose.Types.ObjectId;
     fullName: string;
@@ -17,10 +10,16 @@ export interface IUser {
     banned: boolean;
     legalType?: string;
     legalId?: number;
-    bankAccount?: IBankAccount; // Реквизиты расчетного счета для юридических лиц
     telegramId?: number;
     personalKey: string;
     online: boolean;
+    // Согласия пользователя
+    cookieConsent?: boolean; // Согласие на использование cookie
+    cookieConsentDate?: Date; // Дата согласия на cookie
+    personalDataConsent?: boolean; // Согласие на обработку персональных данных
+    personalDataConsentDate?: Date; // Дата согласия на обработку персональных данных
+    userAgreementConsent?: boolean; // Согласие с пользовательским соглашением
+    userAgreementConsentDate?: Date; // Дата согласия с пользовательским соглашением
 }
 
 const userSchema = new mongoose.Schema<IUser>({
@@ -36,16 +35,16 @@ const userSchema = new mongoose.Schema<IUser>({
     },
     legalType: { type: String, enum: ["ЮЛ", "ИП"] },
     legalId: { type: Number },
-    bankAccount: {
-        accountNumber: { type: String },
-        bankName: { type: String },
-        bik: { type: String },
-        correspondentAccount: { type: String }
-    },
     telegramId: { type: Number, unique: true, sparse: true },
     personalKey: { type: String, required: true, unique: true },
     banned: { type: Boolean, required: true, default: false },
     online: { type: Boolean, required: true, default: false },
+    cookieConsent: { type: Boolean, default: false },
+    cookieConsentDate: { type: Date },
+    personalDataConsent: { type: Boolean, default: false },
+    personalDataConsentDate: { type: Date },
+    userAgreementConsent: { type: Boolean, default: false },
+    userAgreementConsentDate: { type: Date },
 });
 
 export const User: mongoose.Model<IUser> = mongoose.model<IUser>("User", userSchema);

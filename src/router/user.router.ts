@@ -1,19 +1,18 @@
 import express from "express";
 import {authMiddleware} from "../middleware/auth.middleware";
-import {adminMiddleware} from "../middleware/admin.middleware";
 import {UserController} from "../controllers/user.controller";
 
 const userController = new UserController();
 export const userRouter = express.Router()
 
-userRouter.use(authMiddleware);
+// Пользовательские роуты (требуют авторизации)
+userRouter.get("/me", authMiddleware, userController.getMeFunc);
+userRouter.put("/update", authMiddleware, userController.updateMeFunc);
 
-userRouter.get("/me", userController.getMeFunc);
-userRouter.get("/get-user/all", userController.getAllUsersFunc);
-userRouter.get("/get-user/:id", userController.getOneUser);
-userRouter.put("/update", userController.updateMeFunc);
-// Admin token management
-userRouter.get('/tokens/:id', adminMiddleware, userController.listUserTokens);
-userRouter.delete('/tokens/:id', adminMiddleware, userController.revokeUserTokens);
-// Admin: ban/unban user
-userRouter.put('/ban/:id', adminMiddleware, userController.banUser);
+// Админские роуты (требуют авторизации)
+userRouter.get("/get-user/all", authMiddleware, userController.getAllUsersFunc);
+userRouter.get("/get-staff/all", authMiddleware, userController.getAllStaffFunc);
+userRouter.get("/get-user/:id", authMiddleware, userController.getOneUser);
+userRouter.get('/tokens/:id', authMiddleware, userController.listUserTokens);
+userRouter.delete('/tokens/:id', authMiddleware, userController.revokeUserTokens);
+userRouter.put('/ban/:id', authMiddleware, userController.banUser);

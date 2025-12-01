@@ -11,6 +11,12 @@ export class UserService {
         fullName: string;
         email: string;
         password: string;
+        personalDataConsent?: boolean;
+        personalDataConsentDate?: Date;
+        userAgreementConsent?: boolean;
+        userAgreementConsentDate?: Date;
+        cookieConsent?: boolean;
+        cookieConsentDate?: Date;
     }) {
         // use async bcrypt hashing to avoid blocking the event loop
         const hashedPassword = await bcrypt.hash(data.password, 12);
@@ -19,6 +25,12 @@ export class UserService {
             email: data.email,
             password: hashedPassword,
             personalKey: crypto.randomUUID(),
+            personalDataConsent: data.personalDataConsent,
+            personalDataConsentDate: data.personalDataConsentDate,
+            userAgreementConsent: data.userAgreementConsent,
+            userAgreementConsentDate: data.userAgreementConsentDate,
+            cookieConsent: data.cookieConsent,
+            cookieConsentDate: data.cookieConsentDate,
         });
         return this.mapUser(user);
     }
@@ -35,6 +47,12 @@ export class UserService {
             bik?: string;
             correspondentAccount?: string;
         };
+        personalDataConsent?: boolean;
+        personalDataConsentDate?: Date;
+        userAgreementConsent?: boolean;
+        userAgreementConsentDate?: Date;
+        cookieConsent?: boolean;
+        cookieConsentDate?: Date;
     }) {
         // use async bcrypt hashing to avoid blocking the event loop
         const hashedPassword = await bcrypt.hash(data.password, 12);
@@ -52,7 +70,13 @@ export class UserService {
             legalId: legalIdNumber,
             fullName: data.companyInfo.fullName,
             legalName: data.legalType === 'ЮЛ' ? data.companyInfo.legalName : undefined,
-            bankAccount: data.bankAccount || undefined
+            bankAccount: data.bankAccount || undefined,
+            personalDataConsent: data.personalDataConsent,
+            personalDataConsentDate: data.personalDataConsentDate,
+            userAgreementConsent: data.userAgreementConsent,
+            userAgreementConsentDate: data.userAgreementConsentDate,
+            cookieConsent: data.cookieConsent,
+            cookieConsentDate: data.cookieConsentDate,
         });
         return this.mapUser(user);
     }
@@ -98,7 +122,11 @@ export class UserService {
     }
 
     async getAllUsers() {
-        return User.find().select("-password").lean();
+        return User.find({role: "User"}).select("-password").lean();
+    }
+
+    async getAllStaff() {
+        return User.find({role: {$ne: "User"}}).select("-password").lean();
     }
 
     async banUser(userId: string, banned: boolean) {

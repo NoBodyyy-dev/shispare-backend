@@ -78,57 +78,127 @@ export class ParsingService {
 
     public async parseProductsFromAPIAndExcel(file: FileData) {
         try {
+            const mainCategoriesMap = await this.syncMainCategories();
+
             const [products, fileData] = await Promise.all([
                 this.fetchProductsFromAPI(),
                 this.readFile(file),
             ]);
 
-            const titles = fileData.map(f => f.title.toLowerCase().trim());
+            // Создаем Map для быстрого поиска по артикулу из Excel
+            const fileDataByArticle = new Map<number, FileReturnData>();
+            fileData.forEach(row => {
+                if (row.article > 0) {
+                    fileDataByArticle.set(row.article, row);
+                }
+            });
+
+            const productsToUpsert: any[] = [];
             let created = 0;
 
+            // Проходим по всем товарам из API
             for (const product of products) {
-                const productName = (product.name || "").toLowerCase().trim();
-                const matchExcel = fileData.find(row =>
-                    productName.startsWith(row.title.toLowerCase()) ||
-                    row.title.toLowerCase().startsWith(productName) ||
-                    productName.includes(row.title.toLowerCase()) ||
-                    row.title.toLowerCase().includes(productName)
-                );
-
-                if (!matchExcel) continue;
-
                 const variants = [];
+                let subcategoryId: string | null = null;
+                let mainCategoryId: string | null = null;
+                let country: string = "";
+
+                // Определяем основную категорию из group товара (category id из API)
+                // product.group содержит number - это id категории из API
+                // Проверяем разные возможные поля
+                const categoryIdFromAPI = product.group || 
+                                         product.categoryId || 
+                                         product.category?.id || 
+                                         product.catalogItem?.group ||
+                                         product.catalogItem?.categoryId;
+                
+                // Логируем структуру первого товара для отладки
+                if (products.indexOf(product) === 0) {
+                    console.log("🔍 Структура первого товара из API:", {
+                        name: product.name,
+                        group: product.group,
+                        categoryId: product.categoryId,
+                        category: product.category,
+                        catalogItem: product.catalogItem,
+                        foundCategoryId: categoryIdFromAPI
+                    });
+                }
+                
+                if (categoryIdFromAPI && typeof categoryIdFromAPI === 'number') {
+                    const mainCategory = mainCategoriesMap.get(categoryIdFromAPI);
+                    if (mainCategory) {
+                        mainCategoryId = mainCategory._id.toString();
+                    } else {
+                        // Если категория не найдена в синхронизированных, используем первую доступную
+                        console.warn(`⚠️ Категория с id ${categoryIdFromAPI} не найдена для товара "${product.name}", используем первую доступную`);
+                        const firstMainCategory = Array.from(mainCategoriesMap.values())[0];
+                        if (firstMainCategory) {
+                            mainCategoryId = firstMainCategory._id.toString();
+                        }
+                    }
+                } else {
+                    // Если нет category id в товаре, используем первую доступную категорию
+                    console.warn(`⚠️ Товар "${product.name}" не имеет category id (group), используем первую доступную категорию`);
+                    const firstMainCategory = Array.from(mainCategoriesMap.values())[0];
+                    if (firstMainCategory) {
+                        mainCategoryId = firstMainCategory._id.toString();
+                    } else {
+                        // Если нет синхронизированных категорий, ищем в БД
+                        const mainCategories = await Category.find({ level: 1 }).limit(1).lean();
+                        if (mainCategories.length > 0) {
+                            mainCategoryId = mainCategories[0]._id.toString();
+                        }
+                    }
+                }
+
+                // Для каждого варианта товара из API ищем соответствие в Excel по артикулу
                 for (const item of product.items || []) {
-                    const excelMatch = fileData.find(f => f.article === Number(item.sku));
-                    if (!excelMatch) continue;
+                    const article = Number(item.sku);
+                    if (!article || article <= 0) continue;
+
+                    const excelData = fileDataByArticle.get(article);
+                    if (!excelData) continue;
+
+                    // Сохраняем подкатегорию из Excel и страну из первого найденного соответствия
+                    if (!subcategoryId) {
+                        subcategoryId = excelData.category;
+                    }
+                    if (!country) {
+                        country = excelData.country || "";
+                    }
 
                     variants.push({
-                        article: Number(item.sku),
-                        price: excelMatch.price || 0,
+                        article,
+                        price: excelData.price || 0,
                         color: {
                             ru: item.color?.name || "не указан",
                             hex: this.colors[item.color?.name?.toLowerCase()] || "#FFFFFF",
                         },
                         package: {
-                            type: excelMatch.type || item.pack?.name || "",
-                            count: excelMatch.count || this.extractPackCount(item.pack?.name),
-                            unit: excelMatch.unit || this.extractPackUnit(item.pack?.name),
+                            type: excelData.type || item.pack?.name || "",
+                            count: excelData.count || this.extractPackCount(item.pack?.name),
+                            unit: excelData.unit || this.extractPackUnit(item.pack?.name),
                         },
                         discount: 0,
                         countInStock: 100,
                     });
                 }
 
-                if (!variants.length) continue;
+                // Если не нашли ни одного варианта с соответствием в Excel, пропускаем товар
+                if (!variants.length || !subcategoryId) continue;
 
-                const title = product.name?.trim();
+                // Если основная категория не определена, пропускаем товар
+                if (!mainCategoryId) continue;
+
+                const title = product.name?.trim(); // Используем название из API
                 const slug = createSlug(title);
 
                 const newProduct = {
-                    title,
+                    title, // Используем product.name из API
                     description: this.stripHtml(product.text || product.description || ""),
-                    category: matchExcel.category,
-                    country: matchExcel.country || "",
+                    category: mainCategoryId,
+                    subcategory: subcategoryId,
+                    country: country,
                     images: (product.fileImgs || []).map((i: any) => i.url).filter(Boolean),
                     documents: (product.fileDocs || []).map((d: any) => d.url).filter(Boolean),
                     characteristics: (product.details || []).map((d: any) => this.stripHtml(d.text)),
@@ -137,15 +207,19 @@ export class ParsingService {
                     isActive: true,
                 };
 
-                console.log("new >>>>>", newProduct);
-
-                await Product.findOneAndUpdate(
-                    {slug},
-                    {$set: newProduct},
-                    {upsert: true, new: true}
-                );
+                productsToUpsert.push({
+                    updateOne: {
+                        filter: {slug},
+                        update: {$set: newProduct},
+                        upsert: true,
+                    },
+                });
 
                 created++;
+            }
+
+            if (productsToUpsert.length > 0) {
+                await Product.bulkWrite(productsToUpsert, {ordered: false});
             }
 
             console.log(`✅ Импорт завершён: ${created} товаров добавлено/обновлено`);
@@ -159,21 +233,28 @@ export class ParsingService {
     private async readFile(file: Express.Multer.File | Buffer | string): Promise<FileReturnData[]> {
         try {
             const buffer = await this.resolveToBuffer(file);
-            const wb = XLSX.read(buffer, { type: "buffer" });
+            const wb = XLSX.read(buffer, {type: "buffer"});
             const sheetName = wb.SheetNames[0];
             const sheet = wb.Sheets[sheetName];
-            if (!sheet) throw APIError.BadRequest({ message: "Ошибка чтения файла!" });
+            if (!sheet) throw APIError.BadRequest({message: "Ошибка чтения файла!"});
 
-            const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+            const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {defval: ""});
             if (!rows.length) return [];
 
             const filterRows = rows.filter(
                 (row: Record<string, any>) => row["№ поз."] !== undefined && row["№ поз."] !== ""
             );
-            if (!filterRows.length) throw APIError.BadRequest({ message: "Ошибка чтения файла!" });
+            if (!filterRows.length) throw APIError.BadRequest({message: "Ошибка чтения файла!"});
+
+            const allCategories = await Category.find().lean();
+            const categoryMap = new Map<string, ICategory>();
+            allCategories.forEach(cat => {
+                categoryMap.set(cat.title.toLowerCase().trim(), cat as ICategory);
+            });
 
             const returnData: FileReturnData[] = [];
             let currentCategory: ICategory | null = null;
+            const categoriesToCreate: string[] = [];
 
             for (const row of filterRows) {
                 const cellValue = row["№ поз."];
@@ -182,20 +263,35 @@ export class ParsingService {
                     const title = titlePart.trim();
                     if (!title) continue;
 
-                    currentCategory =
-                        (await Category.findOne({ title })) ||
-                        (await Category.create({ title }));
+                    const titleLower = title.toLowerCase();
+                    currentCategory = categoryMap.get(titleLower) || null;
 
-                    continue; // это категория, не продукт
+                    if (!currentCategory) {
+                        categoriesToCreate.push(title);
+                        const newCategory = await Category.create({
+                            title,
+                            level: 2,
+                        });
+                        categoryMap.set(titleLower, newCategory as ICategory);
+                        currentCategory = newCategory as ICategory;
+                    }
+
+                    continue;
                 }
 
-                // ─────────────────────────────
-                // если нет активной категории — создаём дефолтную
-                // ─────────────────────────────
                 if (!currentCategory) {
-                    currentCategory =
-                        (await Category.findOne({ title: "Без категории" })) ||
-                        (await Category.create({ title: "Без категории" }));
+                    const defaultTitle = "Без категории";
+                    const defaultLower = defaultTitle.toLowerCase();
+                    currentCategory = categoryMap.get(defaultLower) || null;
+
+                    if (!currentCategory) {
+                        const defaultCat = await Category.create({
+                            title: defaultTitle,
+                            level: 2,
+                        });
+                        categoryMap.set(defaultLower, defaultCat as ICategory);
+                        currentCategory = defaultCat as ICategory;
+                    }
                 }
 
                 const article: number = Number(row["Артикул"]) || 0;
@@ -233,11 +329,10 @@ export class ParsingService {
                     country,
                 });
             }
-            console.log("ret >>>", returnData)
             return returnData;
         } catch (e) {
             console.error("Ошибка чтения файла Excel:", e);
-            throw APIError.InternalServerError({ message: "Ошибка чтения EXCEL файла" });
+            throw APIError.InternalServerError({message: "Ошибка чтения EXCEL файла"});
         }
     }
 
@@ -261,7 +356,6 @@ export class ParsingService {
             return file.buffer as Buffer;
         }
         if (typeof file === "object" && "path" in file && typeof (file as any).path === "string") {
-            // use async file read to avoid blocking the event loop for large files
             return await fs.promises.readFile((file as any).path);
         }
         if (typeof file === "string") {
@@ -316,6 +410,53 @@ export class ParsingService {
 
     async fetchProductsFromAPI(): Promise<any[]> {
         const products = await axios.get("http://s1-api.sikayufo.ru/catalog?add=count&per_page=300&expand=fileCovers,fileImgs,fileDocs,details,colors,items,catalogItem.pack,catalogItem.color&k=738da44267d8c&t=1")
+        console.log("????", (products.data as { data: any }).data.length)
         return (products.data as { data: any }).data;
+    }
+
+    async fetchMainCategories(): Promise<Array<{ id: number; name: string }>> {
+        try {
+            const response = await axios.get("http://s1-api.sikayufo.ru/catalog/group/all-list");
+            const data = response.data as { data: Array<{ id: number; name: string }> };
+            return data.data || [];
+        } catch (error) {
+            console.error("Ошибка получения главных категорий:", error);
+            throw APIError.InternalServerError({message: "Ошибка получения категорий из API"});
+        }
+    }
+
+    async syncMainCategories(): Promise<Map<number, ICategory>> {
+        const mainCategoriesData = await this.fetchMainCategories();
+        const categoryMap = new Map<number, ICategory>();
+
+        const existingCategories = await Category.find().lean();
+        const existingByTitle = new Map<string, ICategory>();
+        existingCategories.forEach(cat => {
+            existingByTitle.set(cat.title.toLowerCase().trim(), cat as ICategory);
+        });
+
+        for (const catData of mainCategoriesData) {
+            const titleLower = catData.name.toLowerCase().trim();
+            let category = existingByTitle.get(titleLower);
+
+            if (!category) {
+                category = await Category.create({
+                    title: catData.name,
+                    slug: createSlug(catData.name),
+                    level: 1,
+                }) as ICategory;
+            } else if (category.level !== 1) {
+                // Обновляем существующую категорию, если она была подкатегорией
+                category = await Category.findByIdAndUpdate(
+                    category._id,
+                    { level: 1 },
+                    { new: true }
+                ) as ICategory;
+            }
+
+            categoryMap.set(catData.id, category);
+        }
+
+        return categoryMap;
     }
 }

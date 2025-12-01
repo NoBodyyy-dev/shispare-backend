@@ -52,6 +52,11 @@ export class BlogService {
     }
 
     async deletePost(postId: string) {
-        return Post.deleteOne({_id: postId});
+        const post = await Post.findById(postId);
+        if (!post) {
+            throw APIError.NotFound({message: "Пост не найден"});
+        }
+        await Post.deleteOne({_id: postId});
+        return { success: true, deletedId: postId };
     }
 }

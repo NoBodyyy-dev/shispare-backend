@@ -11,6 +11,7 @@ export class AuthController {
 
     public loginFunc = async (req: Request, res: Response, next: NextFunction) => {
         try {
+            console.log("hahah")
             await APIError.catchError(req, res, next);
             const meta = {
                 deviceId: (req.get('x-device-id') as string) || undefined,

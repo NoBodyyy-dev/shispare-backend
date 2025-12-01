@@ -71,7 +71,21 @@ export class OrderController {
         try {
             const {orderNumber} = req.params;
             const order = await orderService.getOrderByNumber(orderNumber);
-            res.status(200).json({order, success: true});
+
+            let paymentUrl = null;
+            if (order.paymentId && !order.paymentStatus) {
+                const {PaymentService} = await import("../services/payment.service");
+                const paymentService = new PaymentService();
+                paymentUrl = await paymentService.getPaymentUrl(order.paymentId);
+            }
+            
+            res.status(200).json({
+                order: {
+                    ...order,
+                    paymentUrl: paymentUrl || undefined
+                },
+                success: true
+            });
         } catch (err) {
             next(err);
         }
@@ -80,7 +94,6 @@ export class OrderController {
     static async getOneOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const {orderNumber} = req.params;
-            // Преобразуем в число, если это возможно, иначе используем как строку
             const orderNum = isNaN(Number(orderNumber)) ? orderNumber : Number(orderNumber);
             const order = await orderService.getOrderByNumber(orderNum);
             res.status(200).json({order, success: true});

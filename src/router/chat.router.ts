@@ -20,12 +20,12 @@ const decodeFilename = (req: any, res: any, next: any) => {
                 const buffer = Buffer.from(originalName, 'latin1');
                 // Декодируем буфер как UTF-8
                 const decoded = buffer.toString('utf8');
-                
+
                 // Проверяем, содержит ли декодированное имя кириллицу
                 const hasCyrillic = /[\u0400-\u04FF]/.test(decoded);
                 // Проверяем, содержит ли другие не-ASCII символы
                 const hasNonAscii = /[^\x00-\x7F]/.test(decoded);
-                
+
                 // Если декодированное имя отличается и содержит валидные UTF-8 символы
                 if (decoded !== originalName && (hasCyrillic || hasNonAscii)) {
                     req.file.originalname = decoded;
@@ -54,4 +54,3 @@ const upload = multer({
 
 // Загрузка файла для чата
 chatRouter.post("/upload", [authMiddleware, upload.single("file"), decodeFilename], chatController.uploadFile);
-

@@ -38,6 +38,15 @@ export class UserController {
         }
     }
 
+    getAllStaffFunc = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+        try {
+            const staff = await this.userService.getAllStaff();
+            res.status(200).json({staff});
+        } catch (e) {
+            next(e);
+        }
+    }
+
     getOneUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
         try {
             const user = await this.userService.getUserById(req.params.id);

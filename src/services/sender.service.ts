@@ -6,6 +6,7 @@ import bot from "../bot";
 import config from '../config/sender.config';
 import {IFinallyCartItems, IOrder, Order} from "../models/Order.model";
 import {ICartProduct, IProduct, IProductVariant} from "../interfaces/product.interface";
+import {User} from "../models/User.model";
 
 interface EmailOptions {
     to: string;
@@ -108,11 +109,13 @@ export class SenderService {
         const statusInfo = statusLabels[data.status] || { label: data.status, color: '#333', icon: '📋' };
 
         let additionalInfo = '';
-        if (data.status === 'cancelled' && data.cancellationReason) {
+        if (data.status === 'cancelled') {
+            // Причина отмены всегда должна отображаться для отмененных заказов
+            const reason = data.cancellationReason || 'Причина не указана';
             additionalInfo = `
                 <div style="background: #fcebea; border-left: 4px solid #e74c3c; padding: 16px; margin: 20px 0; border-radius: 4px;">
                     <h3 style="margin: 0 0 8px 0; color: #c62828; font-size: 16px;">Причина отмены:</h3>
-                    <p style="margin: 0; color: #333; line-height: 1.6;">${data.cancellationReason}</p>
+                    <p style="margin: 0; color: #333; line-height: 1.6;">${reason}</p>
                 </div>
             `;
         }
@@ -308,6 +311,255 @@ export class SenderService {
         } catch (e) {
             console.error(e);
             return {message: "Что-то пошло не так", ok: false};
+        }
+    }
+
+    /**
+     * Отправляет уведомление о новом заказе всем администраторам
+     */
+    public async sendNewOrderNotificationToAdmins(orderId: string): Promise<void> {
+        try {
+            const order = await Order.findById(orderId)
+                .populate("owner", "email fullName legalName phone")
+                .populate("items.product", "title images variants")
+                .lean<IOrder & { owner: any }>();
+
+            if (!order) {
+                console.error("Заказ не найден для отправки уведомления администраторам");
+                return;
+            }
+
+            // Получаем всех администраторов
+            const admins = await User.find({ role: "Admin" })
+                .select("email")
+                .lean();
+
+            if (!admins || admins.length === 0) {
+                console.warn("Администраторы не найдены для отправки уведомления о заказе");
+                return;
+            }
+
+            // Формируем детали заказа
+            const itemsHtml = order.items.map((item: any) => {
+                const product = item.product;
+                // Используем первый вариант, если доступен, или создаем заглушку
+                const variant = product?.variants?.[0] || { price: 0, color: { ru: '', hex: '#000000' }, package: { type: '', count: 0, unit: '' } };
+                const img = product?.images?.[0] || "";
+                const itemPrice = variant.price || 0;
+                const itemTotal = itemPrice * item.quantity;
+                const colorInfo = variant.color?.ru ? ` (${variant.color.ru})` : '';
+                const packageInfo = variant.package ? ` ${variant.package.count}${variant.package.unit} ${variant.package.type}` : '';
+                
+                return `
+                    <tr>
+                        <td style="padding: 15px; border-bottom: 1px solid #e9ecef;">
+                            <div style="display: flex; align-items: center;">
+                                ${img ? `<img src="${img}" alt="${product?.title || 'Товар'}" width="60" height="60" style="object-fit: cover; margin-right: 15px; border-radius: 4px;">` : ''}
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; margin-bottom: 5px; color: #333;">${product?.title || 'Товар'}${colorInfo}${packageInfo}</div>
+                                    <div style="color: #666; font-size: 14px;">
+                                        <div>Цена: ${itemPrice.toLocaleString()} ₽</div>
+                                        <div>Количество: ${item.quantity} шт.</div>
+                                        <div style="font-weight: 600; color: #333; margin-top: 5px;">Сумма: ${itemTotal.toLocaleString()} ₽</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+
+            const deliveryTypeLabels: Record<string, string> = {
+                pickup: "Самовывоз",
+                krasnodar: "Доставка по Краснодару",
+                russia: "Доставка по России"
+            };
+
+            const paymentMethodLabels: Record<string, string> = {
+                card: "Банковская карта",
+                cash: "Наличные",
+                sbp: "СБП",
+                invoice: "Счет на оплату",
+                pay_in_shop: "Оплата в магазине"
+            };
+
+            const statusLabels: Record<string, string> = {
+                waiting_for_payment: "Ожидает оплаты",
+                pending: "Ожидает подтверждения",
+                processing: "В обработке",
+                confirmed: "Подтвержден",
+                shipped: "Отправлен",
+                delivered: "Доставлен",
+                cancelled: "Отменен",
+                refunded: "Возвращен"
+            };
+
+            const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Новый заказ №${order.orderNumber}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
+                                🛒 Новый заказ №${order.orderNumber}
+                            </h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Order Info -->
+                    <tr>
+                        <td style="padding: 30px;">
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                                <h2 style="margin: 0 0 15px 0; color: #333; font-size: 18px; font-weight: 600;">Информация о заказе</h2>
+                                <table width="100%" cellpadding="5">
+                                    <tr>
+                                        <td style="color: #666; width: 40%;">Номер заказа:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.orderNumber}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Дата создания:</td>
+                                        <td style="font-weight: 600; color: #333;">${new Date(order.createdAt).toLocaleString('ru-RU')}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Статус:</td>
+                                        <td style="font-weight: 600; color: #333;">${statusLabels[order.status] || order.status}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Способ доставки:</td>
+                                        <td style="font-weight: 600; color: #333;">${deliveryTypeLabels[order.deliveryType] || order.deliveryType}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Способ оплаты:</td>
+                                        <td style="font-weight: 600; color: #333;">${paymentMethodLabels[order.paymentMethod] || order.paymentMethod}</td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <!-- Customer Info -->
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                                <h2 style="margin: 0 0 15px 0; color: #333; font-size: 18px; font-weight: 600;">Информация о клиенте</h2>
+                                <table width="100%" cellpadding="5">
+                                    <tr>
+                                        <td style="color: #666; width: 40%;">Имя:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.owner?.fullName || order.owner?.legalName || order.deliveryInfo.recipientName || 'Не указано'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Email:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.owner?.email || 'Не указано'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Телефон:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.deliveryInfo.phone}</td>
+                                    </tr>
+                                    ${order.deliveryInfo.city ? `
+                                    <tr>
+                                        <td style="color: #666;">Город:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.deliveryInfo.city}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${order.deliveryInfo.address ? `
+                                    <tr>
+                                        <td style="color: #666;">Адрес:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.deliveryInfo.address}</td>
+                                    </tr>
+                                    ` : ''}
+                                    ${order.deliveryInfo.comment ? `
+                                    <tr>
+                                        <td style="color: #666;">Комментарий:</td>
+                                        <td style="font-weight: 600; color: #333;">${order.deliveryInfo.comment}</td>
+                                    </tr>
+                                    ` : ''}
+                                </table>
+                            </div>
+
+                            <!-- Order Items -->
+                            <div style="margin-bottom: 20px;">
+                                <h2 style="margin: 0 0 15px 0; color: #333; font-size: 18px; font-weight: 600;">Товары в заказе</h2>
+                                <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e9ecef; border-radius: 6px; overflow: hidden;">
+                                    ${itemsHtml}
+                                </table>
+                            </div>
+
+                            <!-- Totals -->
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                                <h2 style="margin: 0 0 15px 0; color: #333; font-size: 18px; font-weight: 600;">Итоговая сумма</h2>
+                                <table width="100%" cellpadding="8">
+                                    <tr>
+                                        <td style="color: #666;">Общее количество товаров:</td>
+                                        <td style="text-align: right; font-weight: 600; color: #333;">${order.totalProducts} шт.</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #666;">Цена без скидки:</td>
+                                        <td style="text-align: right; font-weight: 600; color: #333;">${order.totalAmount.toLocaleString()} ₽</td>
+                                    </tr>
+                                    ${order.discountAmount > 0 ? `
+                                    <tr>
+                                        <td style="color: #666;">Скидка:</td>
+                                        <td style="text-align: right; font-weight: 600; color: #28a745;">-${order.discountAmount.toLocaleString()} ₽</td>
+                                    </tr>
+                                    ` : ''}
+                                    <tr style="border-top: 2px solid #333;">
+                                        <td style="padding-top: 10px; font-size: 18px; font-weight: 700; color: #333;">Итого:</td>
+                                        <td style="text-align: right; padding-top: 10px; font-size: 18px; font-weight: 700; color: #667eea;">${order.finalAmount.toLocaleString()} ₽</td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <!-- Action Button -->
+                            <div style="text-align: center; margin-top: 30px;">
+                                <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/admin/orders/${order.orderNumber}" 
+                                   style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                                    Открыть заказ в админ-панели
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
+                            <p style="margin: 0; color: #999; font-size: 12px;">
+                                © ${new Date().getFullYear()} Shispare. Все права защищены.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+            `;
+
+            // Отправляем email всем администраторам
+            const emailPromises = admins
+                .filter(admin => admin.email) // Фильтруем только тех, у кого есть email
+                .map(admin => 
+                    this.sendEmail({
+                        to: admin.email!,
+                        subject: `Новый заказ №${order.orderNumber} - ${order.finalAmount.toLocaleString()} ₽`,
+                        html: emailHtml,
+                    }).catch(error => {
+                        console.error(`Ошибка отправки email администратору ${admin.email}:`, error);
+                        return false;
+                    })
+                );
+
+            await Promise.allSettled(emailPromises);
+            console.log(`✅ Уведомления о заказе №${order.orderNumber} отправлены ${admins.length} администраторам`);
+        } catch (error) {
+            console.error("Ошибка при отправке уведомлений администраторам о новом заказе:", error);
+            // Не пробрасываем ошибку, чтобы не прерывать создание заказа
         }
     }
 

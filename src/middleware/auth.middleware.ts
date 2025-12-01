@@ -12,7 +12,9 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
         if (!token) return next(APIError.Unauthorized());
         const decoded: TokenPayload | null = await tokenService.validateToken(token, 'A');
         if (decoded === null) return next(APIError.Unauthorized());
-        const user = await User.findOne({_id: decoded.id}).select("-telegramId -password").lean();
+        const user = await User.findOne({_id: decoded.id})
+            .select("-telegramId -password")
+            .lean();
         if (!user) return next(APIError.Unauthorized());
         req.user = user;
         next();

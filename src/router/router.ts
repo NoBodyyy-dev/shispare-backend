@@ -13,23 +13,35 @@ import {postRouter} from "./post.router";
 import {paymentRouter} from "./payment.router";
 import {requestRouter} from "./request.router";
 import {chatRouter} from "./chat.router";
-import {sitemapRouter} from "./sitemap.router";
+import {solutionRouter} from "./solution.router";
 
 export const router: Router = Router();
 
+// Публичные роуты (без авторизации)
 router.use("/auth", authRouter);
-router.use("/blog", blogRouter);
-router.use("/cart", cartRouter);
-router.use("/category", categoryRouter);
-router.use("/order", orderRouter);
 router.use("/product", productRouter);
-router.use("/user", userRouter);
-router.use("/comment", commentRouter);
-router.use("/parse", parserRouter);
+router.use("/category", categoryRouter);
+router.use("/blog", blogRouter);
+router.use("/solution", solutionRouter);
 router.use("/stock", stockRouter);
 router.use("/post", postRouter);
-router.use("/payment", paymentRouter);
 router.use("/request", requestRouter);
-router.use("/chat", chatRouter);
-router.use("/", sitemapRouter);
+router.use("/comment", commentRouter);
+router.use("/payment", paymentRouter);
+
+router.use("/user", userRouter);
+router.use("/user/cart", cartRouter);
+router.use("/user/order", orderRouter);
+router.use("/user/chat", chatRouter);
+
+router.use("/admin/product", productRouter);
+router.use("/admin/category", categoryRouter);
+router.use("/admin/blog", blogRouter);
+router.use("/admin/solution", solutionRouter);
+router.use("/admin/request", requestRouter);
+router.use("/admin/comment", commentRouter);
+router.use("/admin/user", userRouter);
+router.use("/admin/stock", stockRouter);
+router.use("/admin/post", postRouter);
+router.use("/admin/parse", parserRouter);
 

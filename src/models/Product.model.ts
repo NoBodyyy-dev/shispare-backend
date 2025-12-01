@@ -30,7 +30,8 @@ export interface ISEO {
 export interface IProduct extends Document {
     title: string;                     // Название товара
     description: string;              // Описание
-    category: mongoose.Types.ObjectId; // Категория
+    category: mongoose.Types.ObjectId; // Категория (основная, level: 1)
+    subcategory: mongoose.Types.ObjectId; // Подкатегория (из Excel, level: 2)
     country: string;                  // Страна производства
     images: string[];                  // Фото
     slug: string;                      // slug для URL
@@ -83,8 +84,10 @@ const productSchema = new Schema<IProduct>(
         title: {type: String, required: true, trim: true},
         description: {type: String, default: ""},
         category: {type: Schema.Types.ObjectId, ref: "Category", required: true},
+        subcategory: {type: Schema.Types.ObjectId, ref: "Category"},
         country: {type: String, trim: true},
         images: {type: [String], default: []},
+        characteristics: {type: [String], ref: "Characteristics", required: true},
         slug: {type: String, required: true, unique: true, lowercase: true, trim: true},
         displayedRating: {type: Number, default: 0, min: 0, max: 5},
         totalComments: {type: Number, default: 0, min: 0},
@@ -108,6 +111,7 @@ const productSchema = new Schema<IProduct>(
 productSchema.index({title: "text"});
 productSchema.index({slug: 1});
 productSchema.index({category: 1});
+productSchema.index({subcategory: 1});
 productSchema.index({"variants.color.ru": 1});
 productSchema.index({"variants.package.type": 1});
 productSchema.index({isActive: 1});

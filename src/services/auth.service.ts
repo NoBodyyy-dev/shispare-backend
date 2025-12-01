@@ -13,6 +13,10 @@ interface RegisterData {
     legalId?: string;
     email: string;
     password: string;
+    // Согласия пользователя (обязательны при регистрации)
+    personalDataConsent?: boolean;
+    userAgreementConsent?: boolean;
+    cookieConsent?: boolean; // Может быть получено ранее через cookie banner
 }
 
 export class AuthService {
@@ -74,14 +78,34 @@ export class AuthService {
         if (data.type === 'LGL' && (!data.legalType || !data.legalId)) {
             throw APIError.BadRequest({message: 'Для ЮЛ/ИП укажите тип и ИНН'});
         }
+
+        // Проверка обязательных согласий при регистрации
+        if (!data.personalDataConsent) {
+            throw APIError.BadRequest({message: 'Необходимо согласие на обработку персональных данных'});
+        }
+
+        if (!data.userAgreementConsent) {
+            throw APIError.BadRequest({message: 'Необходимо согласие с пользовательским соглашением'});
+        }
     }
 
     private async createUser(data: RegisterData) {
+        const now = new Date();
+        const consentData = {
+            personalDataConsent: data.personalDataConsent || false,
+            personalDataConsentDate: data.personalDataConsent ? now : undefined,
+            userAgreementConsent: data.userAgreementConsent || false,
+            userAgreementConsentDate: data.userAgreementConsent ? now : undefined,
+            cookieConsent: data.cookieConsent || false,
+            cookieConsentDate: data.cookieConsent ? now : undefined,
+        };
+
         if (data.type === 'IND') {
             return this.userService.createIndividualUser({
                 fullName: data.fullName!,
                 email: data.email,
-                password: data.password
+                password: data.password,
+                ...consentData
             });
         } else {
             const companyInfo = await this.companyValidator.validate(data.legalType!, data.legalId!);
@@ -91,6 +115,7 @@ export class AuthService {
                 legalType: data.legalType!,
                 legalId: data.legalId!,
                 companyInfo,
+                ...consentData
             });
         }
     }

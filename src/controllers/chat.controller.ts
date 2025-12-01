@@ -27,7 +27,7 @@ export class ChatController {
                 const decoded = Buffer.from(filename, 'latin1').toString('utf8');
                 const hasCyrillic = /[\u0400-\u04FF]/.test(decoded);
                 const hasNonAscii = /[^\x00-\x7F]/.test(decoded);
-                
+
                 if (decoded !== filename && (hasCyrillic || hasNonAscii)) {
                     filename = decoded;
                 }
@@ -38,7 +38,7 @@ export class ChatController {
             // Определяем тип файла
             const mimeType = file.mimetype;
             let fileType: 'image' | 'video' | 'file' = 'file';
-            
+
             if (mimeType.startsWith('image/')) {
                 fileType = 'image';
             } else if (mimeType.startsWith('video/')) {
@@ -64,4 +64,3 @@ export class ChatController {
         }
     };
 }
-

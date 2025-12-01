@@ -11,8 +11,9 @@ type PaymentData = {
     paymentData: {
         amount: string;
         type: IPaymentMethodType,
-
     };
+    userId?: string;
+    orderNumber?: string;
 }
 
 export class PaymentService {
@@ -22,7 +23,6 @@ export class PaymentService {
     })
 
     createPayment = async (data: PaymentData): Promise<Payment> => {
-        console.log(data.paymentData)
         try {
             const createPayment: ICreatePayment = {
                 amount: {
@@ -34,7 +34,7 @@ export class PaymentService {
                 },
                 confirmation: {
                     type: "redirect",
-                    return_url: "http://localhost:5173/cart"
+                    return_url: `http://localhost:5173/lk/${data.userId}/orders/${data.orderNumber}`
                 },
                 metadata: {
                     orderId: data.orderData.orderId,

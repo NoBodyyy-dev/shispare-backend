@@ -1,23 +1,15 @@
 import {Request, Response, NextFunction} from "express";
 import {RequestService} from "../services/request.service";
-import {APIError} from "../services/error.service";
 
 export class RequestController {
-    private requestService = new RequestService();
+    private readonly requestService = new RequestService();
 
+    /**
+     * Создать новую заявку (публичный endpoint)
+     */
     createRequest = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const {fullName, email, question} = req.body;
-
-            if (!fullName || !email || !question) {
-                throw APIError.BadRequest({message: "Все поля обязательны для заполнения"});
-            }
-
-            // Валидация email
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                throw APIError.BadRequest({message: "Некорректный email"});
-            }
 
             const request = await this.requestService.createRequest({
                 fullName,
@@ -27,62 +19,86 @@ export class RequestController {
 
             res.status(201).json({
                 success: true,
-                message: "Заявка успешно отправлена",
-                data: request,
+                request,
+                message: "Заявка успешно создана",
             });
-        } catch (e) {
-            next(e);
+        } catch (err) {
+            next(err);
         }
     };
 
+    /**
+     * Получить все заявки (только для администраторов)
+     */
     getAllRequests = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const requests = await this.requestService.getAllRequests();
+
             res.status(200).json({
                 success: true,
-                data: requests,
+                requests,
             });
-        } catch (e) {
-            next(e);
+        } catch (err) {
+            next(err);
         }
     };
 
+    /**
+     * Получить заявку по ID (только для администраторов)
+     */
     getRequestById = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const {id} = req.params;
+
             const request = await this.requestService.getRequestById(id);
+
             res.status(200).json({
                 success: true,
-                data: request,
+                request,
             });
-        } catch (e) {
-            next(e);
+        } catch (err) {
+            next(err);
         }
     };
 
+    /**
+     * Ответить на заявку (только для администраторов)
+     */
     answerRequest = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const {id} = req.params;
             const {answer} = req.body;
+            const user = req.user!; // authMiddleware гарантирует наличие user
 
-            if (!answer || !answer.trim()) {
-                throw APIError.BadRequest({message: "Ответ обязателен для заполнения"});
-            }
-
-            const request = await this.requestService.answerRequest(
-                id,
-                answer,
-                req.user!._id.toString()
-            );
+            const request = await this.requestService.answerRequest(id, {answer}, user);
 
             res.status(200).json({
                 success: true,
+                request,
                 message: "Ответ успешно отправлен",
-                data: request,
             });
-        } catch (e) {
-            next(e);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    /**
+     * Удалить заявку (только для администраторов)
+     */
+    deleteRequest = async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const {id} = req.params;
+
+            const result = await this.requestService.deleteRequest(id);
+
+            res.status(200).json({
+                ...result,
+                message: "Заявка успешно удалена",
+            });
+        } catch (err) {
+            next(err);
         }
     };
 }
+
 

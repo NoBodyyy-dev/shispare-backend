@@ -10,9 +10,14 @@ export const errorMiddleware: ErrorRequestHandler = (
 ) => {
     console.log(err)
 
+    if (res.headersSent) {
+        return next(err);
+    }
+
     if (err instanceof APIError) {
         err.path = req.path;
         res.status(err.status).json(err.toJSON());
+        return;
     }
 
     const isProduction = process.env.NODE_ENV === 'production';

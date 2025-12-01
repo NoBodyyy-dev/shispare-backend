@@ -3,7 +3,7 @@ import {createSlug} from "../utils/utils";
 
 export class CategoryService {
     public async getCategories() {
-        return Category.find();
+        return Category.find({ level: 1 });
     }
 
     public async createCategory(data: {
@@ -15,6 +15,7 @@ export class CategoryService {
             title: data.title,
             group: data.group,
             slug,
+            level: 1,
         })
     }
 

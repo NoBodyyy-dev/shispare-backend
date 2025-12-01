@@ -2,17 +2,19 @@ import express, {Router} from "express";
 import {asyncHandler, createCode, createSlug} from "../utils/utils";
 import * as controller from "../controllers/category.controller";
 import {authMiddleware} from "../middleware/auth.middleware";
-import {adminMiddleware} from "../middleware/admin.middleware";
 import {APIError} from "../services/error.service";
 import axios from "axios";
 import {Category} from "../models/Category.model";
 
 export const categoryRouter = Router();
 
-categoryRouter.post("/create", [authMiddleware, adminMiddleware], asyncHandler(controller.createCategory))
+// Публичные роуты
 categoryRouter.get("/get-all", asyncHandler(controller.getAllCategories));
-categoryRouter.put("/update/:id", [authMiddleware, adminMiddleware], asyncHandler(controller.updateCategory));
-categoryRouter.delete("/delete-category/:id", [authMiddleware, adminMiddleware], asyncHandler(controller.deleteCategory));
+
+// Админские роуты (требуют авторизации)
+categoryRouter.post("/create", authMiddleware, asyncHandler(controller.createCategory))
+categoryRouter.put("/update/:id", authMiddleware, asyncHandler(controller.updateCategory));
+categoryRouter.delete("/delete-category/:id", authMiddleware, asyncHandler(controller.deleteCategory));
 
 categoryRouter.post("/insert", asyncHandler(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     try {

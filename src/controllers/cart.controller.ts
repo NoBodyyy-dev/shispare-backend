@@ -99,31 +99,4 @@ export class CartController {
             next(e);
         }
     };
-
-    syncCart = async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { items } = req.body;
-            
-            if (!Array.isArray(items)) {
-                throw APIError.BadRequest({ message: "items должен быть массивом" });
-            }
-
-            const cart = await this.cartService.syncCartFromLocalStorage(
-                req.user!._id.toString(),
-                items.map((item: any) => ({
-                    productId: item.productId || item.product?._id,
-                    article: Number(item.article),
-                    quantity: Number(item.quantity) || 1,
-                }))
-            );
-
-            res.status(200).json({
-                success: true,
-                message: "✅ Корзина синхронизирована",
-                data: cart,
-            });
-        } catch (e) {
-            next(e);
-        }
-    };
 }

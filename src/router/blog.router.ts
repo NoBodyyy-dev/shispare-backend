@@ -1,7 +1,6 @@
 import {Router} from "express";
 import {asyncHandler} from "../utils/utils";
 import {authMiddleware} from "../middleware/auth.middleware";
-import {adminMiddleware} from "../middleware/admin.middleware";
 import {BlogController} from "../controllers/blog.controller";
 import multer from "multer";
 
@@ -10,11 +9,11 @@ const blogController = new BlogController();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Публичные роуты
 blogRouter.get("/get-all", asyncHandler(blogController.getAllPosts));
 blogRouter.get("/get-post/:slug", asyncHandler(blogController.getPost));
 
-blogRouter.use([authMiddleware, adminMiddleware]);
-
-blogRouter.post("/create", upload.single("image"), asyncHandler(blogController.createPost));
-blogRouter.get("/update/:id", asyncHandler(blogController.updatePost));
-blogRouter.get("/delete/:id", asyncHandler(blogController.deletePost));
+// Админские роуты (требуют авторизации)
+blogRouter.post("/create", authMiddleware, upload.single("image"), asyncHandler(blogController.createPost));
+blogRouter.post("/update/:id", authMiddleware, upload.single("image"), asyncHandler(blogController.updatePost));
+blogRouter.delete("/delete/:id", authMiddleware, asyncHandler(blogController.deletePost));

@@ -33,19 +33,6 @@ export const getAllStocks = async (_: any, res: express.Response, next: express.
     }
 }
 
-export const getStockBySlug = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    try {
-        const {slug} = req.params;
-        const stock = await Stock.findOne({slug});
-        if (!stock) {
-            return res.status(404).json({success: false, message: "Акция не найдена"});
-        }
-        return res.status(200).json({stock, success: true});
-    } catch (e) {
-        next(e);
-    }
-}
-
 const deleteExpiredStocks = async () => {
     try {
         const result = await Stock.deleteMany({end: {$lt: new Date()}});
